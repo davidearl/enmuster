@@ -1,0 +1,9 @@
+[Destop Entry]
+Version=0.1
+Name=enmuster
+Exec=/home/user/enmuster/nwjs/nw /home/user/enmuster/enmuster
+Path=/home/user/enmuster
+Icon=/home/user/enmuster/enmuster/enmuster48.png
+Terminal=false
+Type=Application
+Categories=Network;

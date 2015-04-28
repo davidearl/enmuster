@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>enmuster: a web site deployment tool</title>
+    <link rel="stylesheet" href="help.css" type="text/css">
+    <link rel="stylesheet" href="jquery-ui-1.11.4.custom/jquery-ui.min.css" type="text/css">
+    <script src='jquery-2.1.3.min.js'></script>
+    <script src='jquery-ui-1.11.4.custom/jquery-ui.min.js'></script>
+	<script>
+	  $(function(){
+	      require('nw.gui').Window.get().focus();	    
+		  $(".cexlink").click(function(e){
+		    e.preventDefault();
+			require("nw.gui").Shell.openExternal($(this).attr("href"));
+		  });
+	  });
+	</script>
+  </head>
+  <body>
+	<a id='status'></a>
+    <h1 style='vertical-align: top;'><img src='enmuster128.png'> Using Enmuster</h1>
+
+    <p>Enmuster is a cross-platform tool for deploying websites and web apps.</p>
+
+	<p>Once set up, it's a one click action on the big orange button
+	<img src='go.png'> to deploy changes to a project. A change means
+	a file whose date or size differs between your local and remote copies.</p>
+
+	<p style='color: tomato'><strong>Enmuster is Beta
+	software.</strong> Enmuster's purpose is to replace and delete
+	files on your server and possibly execute some of them. If that
+	doesn't work properly, you could lose files. Make sure you have a
+	backup. If the authentication desn't work as intended, nasty
+	people could get access to your server. Use at your own risk. <a href='#bugs'>Known bugs</a>.</p>
+
+    <p>The intention is that you have one or more local copies in a
+    folder/directory and you need to transfer your changes to the web
+    server, your <em>target site</em>. The local copy could be a
+    working copy in which you have been testing. More likely your
+    working copy is managed in some kind of source control system like
+    Subversion or Git and you have a second copy to which you check
+    out for the production and/or test (staging) web site.</p>
+    
+	<h4>Contents</h4>
+	<p>
+	              <a href='#starting'>Getting Started</a>
+	  &bull;&nbsp;<a href='#security'>Security</a> 
+	  &bull;&nbsp;<a href='#projects'>Projects</a>
+	  &bull;&nbsp;<a href='#folders'>Folders</a>
+	  &bull;&nbsp;<a href='#exclusions'>Exclusions</a>
+	  &bull;&nbsp;<a href='#urls'>Deploy via URLs</a>
+	  &bull;&nbsp;<a href='#tunnels'>Via tunnel</a>
+	  &bull;&nbsp;<a href='#revisions'>Revision numbering</a>
+	  &bull;&nbsp;<a href='#maintenance'>Maintenance mode</a>
+	  &bull;&nbsp;<a href='#upgrade'>Upgrading</a>
+	  &bull;&nbsp;<a href='#settings'>Settings</a>
+	  &bull;&nbsp;<a href='#credits'>Credits</a>
+	</p>
+
+    <h4>Alternative solutions</h4>
+
+    <p>There are other strategies, but I've never found any to be
+    completely satisfactory. There are other synchronisation tools
+    too, but again, most of them don't really work as I want them
+    to.</p>
+
+    <p>For example, you could check out from source control directly
+    on the server. However, this means the files which manage the
+    source control are present on the live site; and when working in
+    groups, it also relies on everyone having compatible versions of
+    source control tools.</p>
+
+    <p>For a long time I've used a tool called <a class='cexlink'
+    href='http://www.webdrive.com/'>WebDrive</a> on
+    Windows, which represents a remote server as a local drive
+    letter. However, while it works, it doesn't sit well with
+    Subversion and its Windows client, <a class='cexlink'
+    href='http://tortoisesvn.net/'>TortoiseSVN</a>,
+    because it constantly uploads and downloads its database file, and
+    occasionally this gets corrupted (bad news).</p>
+
+    <p>The worst strategy is, of course, noting which files have
+    changed and copying them manually using programs like WinSCP 
+    or FileZilla.</p>
+
+    <h3 id='starting'>Getting Started</h3>
+
+	<a id='error-edd'></a>
+
+	<p>Enmuster has two components, client and server. The server
+	comprises just one PHP file (PHP in order to support the widest
+	possible range of servers), which you can obtain using the button
+	in the <a href='#settings'>settings page</a> in the
+	client. Instructions for installing this are in the file. It
+	requires a Linux server, probably running Apache, with openssl
+	installed. You will need to make a directory on your server, which
+	we'll call the <em>Enmuster Data Directory</em>, which the web
+	server can write to, and in which you put your <a
+	href='#security-authentication'>public key</a> and <a
+	href='#fragments'>links to the directories that are to be
+	updated<a>. The server file has a link to the Enmuster Data
+	Directory at the top.</p>
+
+	<p>Once set up, the whole project can be transferred on first
+	deployment: the receiving directory on the server just needs to be
+	empty to start with.</p>
+
+    <p>The client lets you say what files to deploy and where. You can also</p>
+	<ul>
+	  <li>test deployments (using <img src='gotest.png'>) without actually
+	  making any changes on the server,</li>
+
+	  <li>automatically increment a <em><a href='#revisions'>revision
+	  number</a></em> in a file each time you deploy,</li>
+
+	  <li>run a script on the server before and after the update, for
+	  <em><a href='#maintenance'>maintenance mode</a></em> to do
+	  whatever is needed to tell visitors the site is briefly out of
+	  action</li>
+
+	  <li>run a script near the end of the deployment which is
+	  intended to allow for <em><a href='#upgrade'>upgrading</a></em>, for
+	  example restructuring a database when the code that uses it is
+	  updated. Such files are only run once.</li>
+	</ul>
+
+    <p>Enmuster stores multiple <a href='#projects'>projects</a>.
+	Projects are independent of each other, representing entirely 
+	separate web sites.</p>
+
+    <p>Each project identifies one or more 
+	<a href='#folders'>folders</a> on your computer whose contents (that
+    are new or have changed) will be copied.</p>
+
+	<p>Each folder can then be copied to one or more targets via
+	http[s] requests to <a href='#urls'>URLs</a> of Enmuster Servers which you set
+	up. These can be on different server computers, or virtual servers
+	all on the same one. However it is also possible to use the <a href='#fragments'>same
+	Enmuster Server to service multiple copies</a> on the server computer
+	(using the fragment notation in the URL, that is a part after a
+	hash symbol)</p>
+
+    <p>Each URL can be accessed directly, or via a 
+	<a href='#tunnels'>SSH tunnel</a>. Tunnels offer some additional
+    security possibilities and also make access possible to servers
+    behind gateway machines.</p>
+
+	<h4 id='deployment'>Deployment</h4>
+
+	<p>When you press the <em>deploy</em> button (<img src='go.png'>)
+	each <a href='#urls'>URL</a> of each <a href='#folders'>folder</a>
+	you have added to the <a href='#projects'>project</a> is deployed
+	in turn, unless the URL, folder or project is temporarily turned
+	off (<img src='lred.png'>).</p>
+
+	<p>If the deployment button looks like this: <img src='gotest.png'>
+	then the deployment will only be tested. Everything, including
+	file uploads, will be done as normal, but the server will not
+	actually ad, remove or update any files.</p>
+
+	<p>Here's what happens for each	URL/folder combination:</p>
+
+	<ol>
+	  <li>A connection to the server identified by the URL is made
+	  (through a <a href='#tunnels'>tunnel</a> if you have asked for one). This can only
+	  succeed if your <a href='#security-authentication'>public
+	  key</a> is present on the server.</li>
+
+	  <li><a href='#maintenance'>Maintenance mode</a> is turned
+	  on. This (a) prevents colleagues from deploying at the same
+	  time, and (b) optionally lets you indicate to users that an
+	  update is in progress and prevents accidents by suspending your
+	  site. Usually updates don't take very long, but if you need to
+	  do a database restructuring, for example, they might.</li>
+
+	  <li>A manifest of the files and folders (that aren't <a
+	  href='#exclusions'>excluded</a>) in the target directory on the
+	  server is prepared and delivered to the client. This contains
+	  the modification times and sizes of the files.</li>
+
+	  <li>A manifest of the files and folders (that aren't excluded)
+	  is prepared for the local copy.</li>
+
+	  <li>The two manifests are compared. Files which are the same -
+	  whose modification dates or sizes have not changed - are removed
+	  from the manifest; local files and folders not present in
+	  the server manifest at all (new files) are added to it; and
+	  files in the server manifest which aren't present locally are
+	  marked in the manifest for removal on the server.</li>
+
+	  <li>New and changed files are uploaded to the server, along with
+	  the revised manifest.</li>
+
+	  <li>The manifest is scanned on the server, to update, add and
+	  remove files. Files for removal or which would be overwritten
+	  are moved to a backup directory the Enmuster Data Directory as a
+	  precaution.</li>
+
+	  <li>The <a href='#revisions'>revision number</a> is updated on
+	  the server, if required.</li>
+
+	  <li>Any <a href='#upgrade'>upgrade</a> required is carried out,
+	  on the server.</li>
+
+	  <li><a href='#maintenance'>Maintenance mode</a> is turned
+	  off.</li>
+
+	</ol>
+
+	<p>The changes made are listed.</p>
+
+	<p>If files are found on the server which <em>post-date</em> those
+	in the local copy, the deployment does not continue. This is
+	because it is assumed someone else has made changes, and therefore
+	you would lose those changes if you were to upload your own.</p>
+
+	<p>Your server needs to be able to accommodate the size of the
+	uploads. Most PHP uploads, for example, are limited to 2MB per
+	file, and this may not be enough. There are two settings to
+	change, either in your php.ini file or Apache .htaccess file if
+	your server configuration allows it. These are
+	<em class='ccode'>upload_max_filesize</em> (the limit for any one file) and
+	<em class='ccode'>post_max_size</em> (the limit for all the files in total, for
+	which the default is usually 8MB). You should be able to set the
+	limit just for the Enmuster site or Enmuster part within your
+	larger site in a .htaccess file as follows, say:</p>
+
+	<pre>
+      php_value post_max_size 200M
+      php_value upload_max_filesize 20M
+	</pre>
+
+	<p>However, some installations don't allow this, and in others
+	where PHP is run as a CGI module rather than built in to Apache,
+	this doesn't work. In that case you need to locate the lines in
+	your <em class='ccode'>php.ini</em> file on the server and update the values
+	there instead. If you can't do either, you need to complain to
+	your provider.</p>
+
+	<h3 id='security'>Security</h3>
+
+	<p>Enmuster enables arbitrary files to be uploaded to your web
+	server, over HTTP or HTTPS, and some of them to be executed as
+	scripts! But only by you, of course. In theory. Because of that,
+	security is important, so that unauthorized visitors cannot also
+	upload and execute files and therefore do pretty much anything
+	they like.</p>
+
+	<p>These are the same operations you would do manually if updating
+	your web site, but you need to know what is happening to ensure
+	that there is no malicious access to your server.</p>
+
+	<p>There are three aspects to this:</p>
+	<ul>
+	  <li><a href='#security-privacy'>privacy</a> of the communication</li>
+
+	  <li><a href='#security-authentication'>authentication<a>: making
+	  sure only you (and your colleagues - updates can be done from
+	  more than one computer) can deploy changes, and</li>
+
+	  <li><a href='#security-integrity'>integrity</a> of your files</li>
+	</ul>
+
+	<h4 id='security-privacy'>Privacy</h4>
+
+	<p>Privacy is easily managed using HTTPS. However, it isn't
+	always practical to use HTTPS instead of HTTP. In this case, data
+	is encrypted explicitly by Enmuster for transfer.</p>
+
+	<p>If you use self-signed certificates, see note under <a
+	href='#selfsigned'>URLs</a>.</p>
+
+	<a id='error-ssl'></a>
+	<h4 id='security-authentication'>Key pair authentication</h4>
+
+	<p>Authentication between client and server is managed using an
+	<em>openssl key pair</em>. Your Enmuster server needs openssl to
+	be installed for this to work.  The Enmuster client generates
+	corresponding public and private keys and keeps the private key to
+	itself on your computer (you can make a new key-pair on the
+	Settings page <img src='settings.png'>).</p>
+	
+	<p>Put the public key (which is offered to you each time you
+	change or add a URL and from the Settings page) into the Enmuster
+	Data Directory (which you create when setting up the Enmuster
+	Server) in a file named according to your client. This means only
+	a client with a private key matching a public key manually
+	uploaded to the server is allowed to establish a connection.</p>
+
+	<p>For example, if your client name is <em class='ccode'>Jerry</em> and your
+	Enmuster Data Directory is at <em class='ccode'>/home/bj/enmusterdata</em>,
+	then you need to copy your public key to
+	<em class='ccode'>/home/bj/enmusterdata/Jerry.pem</em>. Your collaborator
+	<em class='ccode'>Ben</em> can also deploy their copy if they install their
+	public key at <em class='ccode'>/home/bj/enmusterdata/Ben.pem</em>.</p>
+
+	<p>The private key is stored in the app's local storage: typically
+	this is a file in 
+	<em style='white-space: nowrap;' class='ccode'>C:\Users\<em>username</em>\AppData\Local\enmuster</em>
+	on Windows. Keep it safe. It provides the same level of access to
+	your server as logging in or using (S)FTP etc.</p>
+
+	<h4 id='security-executables'>Executable files</h4>
+
+	<p>While most files uploaded will simply replace or augment the
+	ordinary files already in your target web site, and therefore have
+	the same security considerations as any website development, the
+	files uploaded for turning maintenance mode on and off, and for
+	upgrades are special. You do not want these to be accessible by
+	the general visitor, so must not be placed in a directory which is
+	served over HTTP.</p>
+
+	<p>There will be other files you don't want to expose to public
+	gaze too, as a matter of course. It should be safe to put these
+	two files among them, or in a utilities directory or some
+	such.</p>
+
+	<h4 id='security-integrity'>File integrity</h4>
+
+	<p>Enmuster also sometimes <em>deletes</em> files from the server! Actually,
+	it doesn't really delete them, it puts them in a backup directory
+	in the Enmuster Data Directory named with the date. Nevertheless
+	they get removed from their previous place.</p>
+
+	<p>This happens when the corresponding file is removed at your
+	end, so Enmuster removes it to match. However, if you have a place
+	on the server where, for example, you put files uploaded by users,
+	then these won't exist locally and would be subject to
+	removal. Therefore, it's really important to identify these and
+	make <a href='#exclusions'>exceptions</a> for the folders where
+	they will go. Other examples are log files, and config files with
+	specific names but whose contents differ from one copy of a site
+	to another.</p>
+
+	<h3 id='projects'>Projects</h3>
+
+    <p>Projects are listed by name at the top of the page. Click one
+    of these buttons to <strong>select</strong> it and display its details
+    underneath. You can also <strong>re-order</strong> this list by draggging the buttons.</p>
+
+	<p>The enmuster symbol to the left of the project name in the main
+	part of the window shows green <img src='lgreen.png'> if the
+	project will be entirely deployed when the deploy button
+	<img src='go.png'>
+	is pressed; yellow <img src='lyellow.png'> if only
+	some of its folders or URLs will be deployed to or there are some
+	folders without URLs at all; and red <img src='lred.png'> if the
+	project's deployment is turned off altogether. To <strong>turn
+	off</strong> deployment temporarily, click this button; click it
+	again to turn back on.</p>
+
+	<p>When a new project is created, it is set to do test deployments, indicated by the 
+	<img src='gotest.png'> symbol.</p>
+
+	<ul>
+	  <li>To add a <strong>new</strong> project, click <img src='plus30.png'>
+	  at the end of the list of projects, and
+	  fill in the rest of the details underneath</li>
+
+	  <li>To change <strong>test</strong> mode, click <img
+	  src='test.png'>. When testing, the deployment button looks like
+	  this: <img src='gotest.png'>, and when live looks like this:
+	  <img src='go.png'></li>
+
+	  <li>To <strong>delete</strong> a project, click <img src='x.png'> and then
+	  confirm. This has no effect on the server or your local files - it
+	  doesn't delete any files! It just removes the project definition
+	  from the Enmuster client.</li>
+
+	  <li>To <strong>rename</strong> a project, select it, and then
+	  click on its name at the top of the details to type a new
+	  one. Project names identify the project on the server as well as
+	  to you, so you can't just give them arbitray names: if you
+	  change a project name you'll need to <a href='#fragments'>make a
+	  change to the corresponding link</a> in the Enmuster Data
+	  Directory on the server. If you are working collaboratively,
+	  this may also affect your colleagues.</li>
+
+	  <li>To <strong>export</strong> a project, that is to move it to
+	  another computer or <strong>share</strong> it with a colleague,
+	  click <img src='share.png'> alongside the project name. This
+	  saves the project definition to a <a class='cexlink'
+	  href='http://en.wikipedia.org/wiki/JSON'>JSON</a>
+	  file.</li>
+
+	  <li>To <strong>import</strong> a previously exported project,
+	  drag the JSON file from your file browser (File Explorer in
+	  Windows, Finder on Mac) onto the <em>new project</em> <img
+	  src='plus30.png'> button near the top of the page.</li>
+
+	</ul>
+
+	<p>Note that when you export a project which uses <a
+	href='#tunnels'>tunnels</a> the credentials you use to access
+	those tunnels are removed. If a colleague wants to use the project
+	like this, they must supply their own credentials. Also if a
+	colleague imports a project, it is unlikely their folders will be
+	in the same place as yours, so they will then need to be replaced
+	- see <a href='#folders'>below</a>. The absence of a folder is
+	indicated prominently!</p>
+
+	<h3 id='folders'>Folders</h3>
+
+	<p>Each project comprises one or more folders (directories) on
+	your computer. When you deploy (<img src='go.png'>) or test (<img
+	src='gotest.png'>) a project, each folder is scanned for changes
+	and these (excluding exceptions) are transmitted to each of the
+	URLs associated with the folder.</p>
+
+	<p>Each folder then comprises a number of sections which control
+	how the deployment happens. You can <strong>hide or show</strong>
+	the sections by pressing the arrow <img src='aclose.png'> or <img
+	src='aopen.png'> to the left of the first section under the
+	enmuster button.</p>
+
+	<p>The sections manage: <a
+	href='#exclusions-specific'>excluding</a> specific folders or
+	files and excluding files which match a <a
+	href='#exclusions-patterns'>pattern</a>; <a href='#urls'>URLs</a>
+	to deploy the folder to, possibly via a <a
+	href='#tunnels'>tunnel</a>; <a href='#revisions'>revision
+	numbering</a>; <a href='#maintenance'>maintenance mode</a>; and
+	programmed <a href='#upgrades'>upgrades</a>.</p>
+
+	<ul>
+	  <li>To <strong>add</strong> a folder to a project, drag it from
+	  your computer's file browser (File Explorer, Finder etc) onto the area
+	  marked <em>drop folder(s) here to add to project</em></li>
+
+	  <li>To <strong>remove</strong> a folder from a project, click
+	  <img src='x.png'> alongside the folder name, and confirm.</li>
+
+	  <li>To <strong>replace</strong> a folder, drag it from your file
+	  browser onto the path of the folder you want to replace</li>
+
+	  <li>To temporarily <strong>suspend</strong> a folder from being
+	  deployed when you press the deploy button (<img src='go.png'>),
+	  press the enmuster button to the left of its path. This shows
+	  green <img src='lgreen.png'> when the folder will be deployed to
+	  all its URLs, yellow <img src='lyellow.png'> if some of the URLs
+	  are suspended or there are none and red <img src='lred.png'> if
+	  the folder is itself suspended. To turn back on, click the
+	  button again.</li>
+
+	  <li>To <strong>change the order</strong> of folders within a
+	  project, drag them up or down. This is mainly for your
+	  convenience, but deployments happen in the order they
+	  appear. It is probably easier to drag when the folder details
+	  are collapsed (<img src='aopen.png'>)</li>
+	</ul>
+
+	<h3 id='exclusions'>Exclusions</h3>
+
+	<p>You can either <a href='#exclusions-specific'>ignore specific
+	files or folders</a> within a folder hierarchy or files or folders
+	anywhere in the hierarchy whose names match a simple <a
+	href='#exclusions-patterns'>pattern</a>. The first two sections
+	under the folder name manage this.</p>
+
+	<h4 id='exclusions-specific'>Excluding specific files or folders</h4>
+
+	<p>When a folder is deployed, changes to it are mirrored on the
+	server. This includes removing files: if you delete or rename an
+	item locally, the same item will be removed from the server. When
+	an item is removed on the server it is backed up in a directory
+	named by date in the Enmuster Data Directory.</p>
+
+	<p>However, some directories on the server will probably be used
+	to store the state of the web app: files the users have uploaded,
+	or transient files. By definition, these won't appear in your
+	local copy so would normally be subject to removal. Therefore you
+	need to add an exception for the folder(s) which will contain
+	these files. You will need a (possibly empty) version of the
+	folder in your local copy to exclude it. If that's a test version,
+	it will naturally exist anyway.</p>
+
+	<p>Other examples include configuration files which may be present
+	at both ends but are unique to each site and shouldn't be
+	overwritten with a local version. Exclude these too.</p>
+
+	<p>The names of excluded items are stored relative to the local
+	folder, so if you move it, your exclusions still work.</p>
+
+	<p>Excluded items are completely ignored at both ends. If a folder
+	is excluded, we don't look at what's in it at either end when
+	looking for changes.</p>
+
+	<ul>
+	  <li>To <strong>exclude</strong> a file or folder, drag it from
+	  your computer's file browser (Windows Explorer, Finder etc.)
+	  onto the box marked <em>drop file/folder here to exclude from
+	  being deployed</em></li>
+
+	  <li>To <strong>cancel</strong> an exclusion, press <img
+	  src='x.png'> next to the item, and confirm. This has no effect
+	  on the item itself. However bear in mind that on next
+	  deployment, this may cause that item to be deleted or
+	  overwritten with a local copy (see above).</li>
+	</ul>
+
+	<h4 id='exclusions-patterns'>Excluding matching names</h4>
+
+	<p>You can also ignore any files or folders whose names match a
+	simple pattern. Such files or folders (and their contents) will be
+	ignored wherever they appear in the folder hierarchy.</p>
+
+	<p>Examples include files left around by editors (such as Emacs'
+	backup and editing in progress files) and folders used by source
+	control systems (Subversion uses a .svn directory to store its
+	database).</p>
+
+	<p>The patterns are very simple; they are not full regular
+	expressions. An asterisk is the only special character: a wildcard
+	meaning any sequence of characters. A comma is, however, used to
+	separate the patterns so commas in patterns are not recognised. A
+	period is just like any other character (those familiar with
+	regexps will know that for those, ulike Enmuster, a period means
+	any single character). Question marks are also not treated
+	specially.</p>
+
+	<p>The whole name must match for it to be ignored (so if you have
+	<em class='ccode'>b*d</em> for example, <em
+	class='ccode'>abcd</em> or <em class='ccode'>bcde</em> won't be
+	excluded.</p>
+
+	<p>A selection of commonly encountered files to ignore is provided
+	when you add a folder. They will be ignored at both ends of the
+	update and need not exist at either end.</p>
+
+	<ul>
+	  <li>To <strong>add</strong> or <strong>remove</strong> a
+	  pattern, click in the list of patterns and edit it. Patterns
+	  should be separated by commas; additional spaces are
+	  ignored. If you don't want any patterns, just edit them all
+	  out.</li>	 
+	</ul>
+
+	<h3 id='urls'>Deploy via URLs</h3>
+
+	<ul>
+	  <li>To <strong>add a URL</strong> to a folder, click <img
+	  src='plus.png'> at the end of the block labelled <em>deploy this
+	  folder via these URLs</em>. Then paste or type the URL into the
+	  box provided.</li>
+
+	  <li>To <strong>remove</strong> a URL, click <img src='x.png'>
+	  alongside, and confirm.</li>
+
+	  <li>To <strong>allow</strong> connection to a URL with a <a
+	  href='#selfsigned'>self-signed certificate (q.v.)</a>,
+	  <strong>remove</strong> a URL, click <img
+	  src='certificategreen.png'>.</li>
+
+	</ul>
+	
+	<p>The URL will definitely include the protocol, http or https. It
+	might include a port number after the domain name part, and, less
+	likely, username and password if it is set up to use <a class='cexlink'
+	href='http://httpd.apache.org/docs/2.2/howto/auth.html'>basic
+	auth</a> or <a class='cexlink'
+	href='http://httpd.apache.org/docs/2.2/howto/auth.html'>digest
+	auth</a>. It may also have a path part if it is not a site in its
+	own right. If <a href='#fragments'>deploying to
+	several instances of a site</a> on the same server, it will have a fragment, that is a
+	hash part.</p>
+
+	<p>When you add a URL, the site it refers to is checked, so it
+	must already have been set up. It also offers you a public key to
+	put on the server to permit your deployments: see <a
+	href='#security-authentication'>authentication</a> above. If you
+	are using the same server for multiple deployments you only need
+	to do this once.</p>
+
+    <p>Each folder is deployed over HTTP or HTTPS to an Enmuster
+    Server. The server is very simple: it's just one file, and you can
+    download it by pressing the button for this on the Settings page
+    (<img src='settings.png'>). Instructions for installation are in
+    the file.</p>
+
+	<p>Ideally, the Enmuster Server should run as its own web site,
+	i.e. with its own URL. However, it can be in subfolder of the
+	Target Site if you must, and this is undoubtedly simpler (it
+	doesn't require setting up a new virtual server in Apache).</p>
+
+	<p>Ideally, the Enmuster Server should be an encrypted web site,
+	that is HTTPS. However, it can be HTML if you must, and the data
+	transferred will be independently encrypted.</p>
+
+	<p>Ideally, you would put the Enmuster Server on its own port (it
+	should be private). This will avoid problems where HTTPS
+	connections cannot share virtual servers on the same
+	port. However, the client is up-to-date so <a class='cexlink'
+	href='http://en.wikipedia.org/wiki/Server_Name_Indication'>Server
+	Name Indication (SNI)</a> will also work. Of course, you cannot do
+	this if is run as part of your target site.</p>
+
+	<p>If you don't have HTTPS, you could also consider using a <a
+	href='#tunnels'>SSH tunnel</a> to the Enmuster Server and only
+	allowing HTTP access from the server machine itself (Apache's <a class='cexlink'
+	href='http://httpd.apache.org/docs/2.2/howto/access.html'><em>Allow
+	from address</em> directive</a>, where <em>address</em> is
+	<em class='ccode'>localhost</em>. (If you use an IP address 127.0.0.1 to do
+	this, don't forget also the IPv6 equivalent ::1).</p>
+
+	<h4 id='selfsigned'>self signed certificates</h4>
+
+	<p>If you're using HTTPS for your an Enmuster Server, then your
+	certificate will normally be checked just like a browser would,
+	and this disallows a self-signed certificate because, in
+	principle, the identity of the server cannot be assured. However,
+	in this case, your identifty is checked on the server by your
+	public key, so a "man-in-the-middle" attack would not succeed and
+	a self-signed certificate is useful to encrypt the conversation
+	between server and client. (Once free, easily managed certificates
+	become availble through <a class='cexlink'
+	href='https://letsencrypt.org'>letsencrypt.org</a> there will no
+	longer be any good reason to use self-signed certificates.)</p>
+
+	<p>To allow connection using a URL which has a self-signed certificate, press the
+	padlock button alongside the URL indicating a secure connection
+	(<img src='certificategreen.png'>) so that it shows yellow
+	instead: <img src='certificateyellow.png'> (click again to turn full security checks back on).</p>
+
+
+	<h4 id='fragments'>Using the same server to deploy to several instances of a site</h4>
+
+    <p>When Enmuster makes its requests to a URL, it uses the project
+    name to locate the files on the server which are to be updated. A
+    link should be placed in the Enmuster Data Directory with the same
+    name as the project referencing the directory to modify. (It can
+    also be a file containing only the path name of the folder).</p>
+
+	<p>However, the same Enmuster Server can be used to update more
+	than on instance of the target site. In this case, choose a name
+	for each instance. Instead of a link, make a directory with the
+	name of the project. In that directory put links with names of
+	each instance referencing the relevant directories (or files
+	containing only their paths). At the client end, quote the
+	instance name as the fragment of the URL, that is, the part of the
+	URL after a hash symbol.</p>
+
+	<p>For example, say you have two sets of files which should be
+	updated on your server, in directories called
+	<em class='ccode'>/home/me/vanilla</em> and <em class='ccode'>/home/me/chocolate</em>. Let's
+	also assume your Enmuster Data Directory is
+	<em class='ccode'>/home/bj/enmusterdata</em>, your project is called
+	<em class='ccode'>icecream</em> and you've put your Enmuster Server on port 3000 at
+	<em class='ccode'>https://enmuster.icecream.com</em>.</p>
+	
+	<p>Therefore, on the server, do:</p>
+
+	<pre>
+	  mkdir /home/bj/enmusterdata/icecream
+	  ln -s /home/bj/vanilla /home/bj/enmusterdata/icecream/vanilla
+	  ln -s /home/bj/chocolate /home/bj/enmusterdata/icecream/chocolate
+	</pre>
+
+	<p>And on the client, add two URLs:</p>
+	<pre>
+	  https://enmuster.icecream.com:3000/#vanilla
+	  https://enmuster.icecream.com:3000/#chocolate
+	</pre>
+	
+	<h3 id='tunnels'>Via tunnel</h3>
+	
+	<p>Normally, your HTTP(s) connection is direct from your computer
+	to a specific port on the server (often 80 or 443, but may well be
+	different for Enmuster). A SSH tunnel creates a means whereby you
+	can access that nominated end point either from a third computer
+	or the server itself. To do this you must be able to log in to the
+	third computer using SSH. (Typically, you'd use <a class='cexlink'
+	href='http://www.chiark.greenend.org.uk/~sgtatham/putty/download.html'>Putty</a>
+	to do this on Windows, or the ssh command on Linux).</p>
+
+	<p>Authentication for this login uses a username and either a
+	key-pair or a password. The private key stays on the client and
+	the public key on the server. (These are not the same keys that
+	Enmuster uses to authenticate itself to the Enmuster Server!).</p>
+
+	<p>A private key can itself optionally be protected with a
+	password. Usually, this password is delivered using an
+	<em>authentication agent</em> so you don't have to keep typing it
+	on every access. Indeed when Enmuster uses a key-pair for tunnel
+	authentication, it does not have the means to ask for a password
+	interactively. So either use a private key without a password, or
+	run Putty's agent <a class='cexlink'
+	href='http://www.chiark.greenend.org.uk/~sgtatham/putty/download.html'>Pageant</a>
+	to supply it.</p>
+
+	<p>I recommend not using existing keys for this, but generate a
+	pair for the purpose.  On the server do something like</p>
+	
+
+	<pre>       ssh-keygen -t rsa -C "Enmuster Jerry"</pre>
+
+	<p>This makes a 2048 bit key, which at the time of writing should
+	be secure enough. The string at the end is just a comment which
+	helps identify the key: I suggest you use your Enmuster client
+	name in it. Then copy the private key (over a secure connection)
+	and paste it to the space provided when adding a tunnel, and then
+	<em>delete the private key file from the server</em> - not doing
+	so is like leaving a physical key in the lock! Install the public
+	key by appending it to the file <em
+	class='ccode'>~/.ssh/authorized_keys</em>. You can use the same
+	public key for all the servers you want to deploy to using a
+	tunnel.</p>
+
+	<p>Alternatively you can generate a key-pair using Putty. This is
+	somewhat more secure as the private key never appears on the
+	server, even briefly. However, Putty uses its own format for the
+	keys, so you need to use its conversion method to get them in
+	openssh format, which both Enmuster and the server use.</p>
+
+	<p>A tunnel needs three things to work, in addition to the URL
+	(which includes both domain and port) which will eventually be
+	accessed from the far end of the tunnel (this URL is unchanged,
+	but may be a URL that is otherwise inaccessible).</p>
+
+	<ul>
+	  <li>The host name (a domain name, such as
+	  <em class='ccode'>ssh.icecream.com</em>, or IP address of the machine which is
+	  the far end of the tunnel.</li>
+
+	  <li>The port on that machine where the tunnel should
+	  connect. This is usually port 22, so you often don't need to
+	  quote it, but if you do, put it after a colon after the domain
+	  name, e.g. <em class='ccode'>ssh.icecream.com:2160</em>. Note: if using an
+	  IPv6 addresses instead of a domain name, together with a port,
+	  needs the IP address to be put in square brackets to avoid
+	  ambiguity, e.g. <em class='ccode'>[2001:db8:a0b:12f0::1]:2160</em> - but this
+	  is very unusual.</li>
+
+	  <li>A port on your own computer which is the near end of the
+	  tunnel. So long as it's not already in use, this is
+	  arbitrary. You can choose it on the Settings page (<img
+	  src='settings.png'>) if you need to; it will use local port 8002
+	  unless you say otherwise.</li>
+	</ul>
+
+    <p>So, to <strong>add a tunnel</strong> to a URL, click <img
+    src='tunnel.png' style='width: 20px;'> next to the URL. Enter the login username, the login
+    password or private key, as above, and the hostname or
+    hostname:port in the three boxes. To <strong>remove</strong> a
+    tunnel, click <img src='x.png'> next to it.</p>
+	
+    <p>If you export a project, tunnel credentials (from the first two
+    boxes) are removed!</p>
+
+	<a id='error-revisions'></a>
+	<h3 id='revisions'>Revision numbering</h3>	
+
+    <p>Each time you deploy changes, you can arrange to automatically
+    increment a revision number stored in one of your files. That file
+    can then be read or executed by other components of your site, to
+    display it on an "about" page, for example. Another helpful use
+    for this number is to override the browser cache when updating
+    Javascript or CSS files etc. For example, let's say you have the
+    following in your HTML, and this is generated using PHP:</p>
+
+	<pre>      &lt;link rel="stylesheet" type="text/css" src="/style.css"&gt;</pre>
+
+    <p>style.css may get stuck in the browser cache when you deploy new HTML which depends on it. To avoid this you can put a version query string on the end, like this:</p>
+
+	<pre>      &lt;link rel="stylesheet" type="text/css" src="/style.css?v=121"&gt;</pre>
+
+    <p>Let's say your revision number is in a file called <em class='ccode'>revision.php</em> as follows:</p>
+
+	<pre>      &lt;?php /* ~revision~ */ function revision() { return 121; } ?&gt;</pre>
+
+    <p>Notice the text <em class='ccode'>~revision~</em> in the comment. Then, having
+    included that file somewhere in your PHP, use something like this
+    for the stylesheet link:</p>
+
+	<pre>      &lt;link rel="stylesheet" type="text/css" src="/style.css?v=&lt;?php echo revision(); ?&gt;"&gt;</pre>
+
+    <p>The idea is then to ensure this number gets updated with each
+    code change (which makes the browser think, correctly, that this style.css is
+    a different file).</p>
+
+	<p>To do this, <strong>add</strong> the file to the
+	<em>automatically update revision number...</em> section for your
+	folder by dragging the file (<em class='ccode'>revision.php</em> in our example)
+	from your computer's file browser to the space provided.</p>
+
+	<p>When this is set, at the end of each deployment (after
+	uploading files, but before upgrading), Enmuster locates the file
+	on the server and looks for lines containing <em
+	class='ccode'>~revision~</em>. It then looks for the first decimal
+	number following, and replaces it with the next number in
+	sequence. Enmuster replaces the numbers on every line of the file
+	containing <em class='ccode'>~revision~</em> if there's more than
+	one such line, but only the first number following it on each such
+	line. There can be anything non-numeric on the same line between
+	the two.</p>
+
+    <p>To <strong>get the ball rolling</strong>, you'd want to include
+    a file containing</p>
+	<pre>      ... ~revision~ ... 0 ...</pre>
+	<p>in your local folder. That way, it will be incremented to
+    1 on the first deployment. You can also reset the number locally,
+    but bear in mind this may affect colleagues working on the same
+    project. Also if you <strong>change</strong> the date or size of
+    the file then it will be uploaded again with the number that
+    happens to be in it, and then incremented. Therefore, you might
+    also want to <a href='#exclusions'>make an exception</a> to prevent this file from being
+    uploaded in normal circumstances.</p>
+
+	<h3 id='upgrade'>Upgrading</h3>
+
+	<p>Upgrade files are a means of applying updates which require
+	more than just a file to be replaced, for example, reorganising a
+	database in some way to match changes in the code that runs a web app.</p>
+
+	<p>An upgrade file should only be run once, but there will be
+	several of them as time goes on. Therefore, the files are
+	identified by a pattern rather than individually, but are only
+	considered eligible to be run as an upgrade if they are new - they
+	don't already exist on the server.</p>
+
+	<p>Choose a distinctive pattern, such as <em class='ccode'>*.upgrade</em> or
+	<em class='ccode'>*.upgrade.php</em> so you don't accidentally run an old file
+	as if it were an upgrade.</p>
+
+	<p>If a deployment finds more than one such file, the order in
+	which they are run is not specified.</p>
+
+    <p>An upgrade file can be anything that can be run on the server
+    which can validly start <em class='ccode'>#!</em> or <em
+    class='ccode'>&lt;?php</em>. Files that start <em
+    class='ccode'>#!</em> are simply executed: what processes them
+    depends on what follows the <em class='ccode'>#!</em> in the usual
+    Linux shell way. For example <em class='ccode'>#!/bin/sh</em> or
+    <em class='ccode'>#!/usr/bin/perl</em>. Files starting <em
+    class='ccode'>&lt;?php</em> are run with the php command line
+    interpreter: <em>not</em> the web server. In both cases the
+    working directory is the directory where the maintenance file is
+    located.</p>
+
+	<p>A particularly common case is to execute a set of SQL commands
+	(say for MySQL), but you can't just run these because you need a
+	username and password to access the database. While you could put
+	these in the file, it would avoid duplication to use the same
+	configuration file as the main web app to obtain these. So you
+	could, for example, have a an upgrade file containing SQL commands
+	which is run using a little PHP file (using the <em
+	class='ccode'>#!</em> in the SQL file to invoke it) which looks up
+	the credentials and passes them and the SQL code on to <em
+	class='ccode'>mysql</em>.</p>
+
+    <p><strong>Do not put upgrade files in the html directory hierarchy
+    where visitors can execute it!</strong> That would cause havoc by
+    re-running an upgrade twice - or worse.</p>
+
+	<p>To <strong>add</strong>, <strong>remove</strong> or
+	<strong>replace</strong> an upgrade pattern, click on the existing
+	one in the upgrade sction for the folder (or <em class='ccode'>[none]</em> if
+	there isn't one yet) and type the pattern. The patterns are the
+	same simple patterns as for <a
+	href='#exclusions-patterns'>exclusions</a>, just using * as a
+	wildcard, but there is only one, not a list of patterns.</p>
+
+	<a id='error-maint'></a>
+	<h3 id='maintenance'>Maintenance mode</h3>
+
+    <p>It is sometimes necessary to indicate to or prevent users from
+    making changes while you are in the middle of an update. You can
+    manage this automatically. How you indicate this depends on your
+    own site, of course. Typically it might involve creating a file or
+    setting a field in a database, which, if it exists, causes your
+    website to put up a holding page.</p>
+
+    <p>This is managed by identifying a file to Enmuster which will be
+    executed on the server. <strong>Add</strong> such a file by
+    dragging it from the computer's file browser (Windows Explorer,
+    Finder etc.) to the box indicated in the <em>turn maintenance mode
+    on and off...</em> section for a folder. To
+    <strong>remove</strong> it, press <img src='x.png'> alongside. To
+    <strong>replace</strong> it, drag the new file onto the name of
+    the old one.</p>
+
+    <p>The maintenance file can be anything that can be run on the
+    server which can validly start <strong>#!</strong> or
+    <strong>&lt;?php</strong>, just like an upgrade file - <a
+    href='#upgrade'>see above</a>.</p>
+
+	<p>The file is run twice, once at the start and once at the end of
+	each deployment. It is passed a parameter <em
+	class='ccode'>on</em> or <em class='ccode'>off</em>
+	respectively. So for example, you can determine this in PHP using
+	<em class='ccode'>$argv[1]</em> (and the syntax is actually the
+	same in a Linux shell).</p>
+
+    <p><strong>Do not put this file in the html directory hierarchy
+    where visitors can execute it!</strong> They would then be able to
+    turn your lock on.</p>
+
+	<h3 id='settings'>Settings</h3>
+
+    <p><strong>Change settings</strong> by clicking <img
+    src='settings.png'> in the top right of Enmuster's home page.</p>
+
+	<p>If change your client name, you will need to <a
+	href='#security-authentication'>rename your public key</a> in the
+	Enmuster Data Directory on each server you deploy to.</p>
+
+	<p>If your key pair is compromised, you can generate a new one
+	here. You can also copy the public key for pasting to the servers,
+	or save it to a file.</p>
+
+	<p>If you use <a href='#tunnels'>tunnels</a>, you can change the
+	local port of the tunnel here, should you need the default, 8002,
+	for something else.</p>
+
+	<p>Finally, you can obtain the code for the server side of
+	Enmuster here. The file contains instructions for installation,
+	and you need to edit just one line, right at the top of the file,
+	to identify your Enmuster Data Directory.</p>
+
+	<h3 id='bugs'>Known bugs and wish list</h3>
+
+	<ul>
+	  <li>On Windows, at least, if you click in a window behind
+	  Enmuster's to bring it to the front, it leaves part of the
+	  Enmuster window around until the content of the other window
+	  updates for some other reason. If you ALT+TAB to bribng the
+	  other window to the front, this doesn't happen. This appears to
+	  be a bug in nw.js, the framework on which Enmuster is
+	  built. There is a <a class='cexlink'
+	  href='https://github.com/nwjs/nw.js/issues/3384'>report for this
+	  on GitHub</a>.</li>
+
+	  <li>At the moment, if you have a file or folder on the server
+	  which isn't present locally, Enmuster will delete it if it is
+	  not listed as an exception, on the basis it has been deleted
+	  locally. It would be better if it knew that it has
+	  <em>never</em> existed locally and was potentially not for
+	  deletion. Make sure you do a <a href='#deployment'>trial</a>
+	  first!</li>
+	</ul>
+
+	<h3 id='credits'>Credits</h3>
+
+	<p>Enmuster is Copyright &copy; 2015 <a class='cexlink'
+	href='http://www.frankieandshadow.com'>David Earl</a> and licensed
+	under the <a class='cexlink'
+	href='http://opensource.org/licenses/MIT'>MIT License</a>. Find it
+	on <a class='cexlink'
+	href='https://github.com/davidearl/enmuster'>Github</a>.</p>
+
+	<p>Enmuster is built using <a class='cexlink'
+	href='http://nwjs.io/'>nw.js</a>, licensed under the MIT License,
+	which in turn deploys node.js and Chromium. It also makes use of
+	the following third-party components under the MIT License unless stated:</p>
+
+	<ul>
+	  <li><a class='cexlink' href='http://jquery.com/'>jQuery</a></li>
+	  <li><a class='cexlink' href='https://jqueryui.com/'>jQueryUI</a></li>
+	  <li><a class='cexlink' href='https://www.npmjs.com/package/async'>async</a></li>
+	  <li><a class='cexlink' href='https://www.npmjs.com/package/node-forge'>node-forge</a> (<a class='cexlink' href='http://opensource.org/licenses/BSD-3-Clause'>BSD-3-Clause License</a>)</li>
+	  <li><a class='cexlink' href='https://www.npmjs.com/package/request'>request</a> (<a class='cexlink' href='http://opensource.org/licenses/Apache-2.0'>Apache2 License</a>)</li>
+	  <li><a class='cexlink' href='https://www.npmjs.com/package/ssh2'>ssh2</a></li>
+	  <li><a class='cexlink' href='https://www.npmjs.com/package/temp'>temp</a></li>
+	  <li>Windows installer <a class='cexlink' href='http://www.jrsoftware.org/isinfo.php'>Inno Setup</a> (which has its own <a class='cexlink' href='http://www.jrsoftware.org/files/is/license.txt'>license</a>)</li>
+	</ul>
+
+
+
+	<div style='height: 800px;'></div>
+  </body>
+</html>

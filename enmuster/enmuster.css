@@ -1,0 +1,755 @@
+@font-face {
+    font-family: OpenSans;
+    src: url(OpenSans-Light.ttf);
+    font-weight: normal;
+    font-style: normal;
+}
+@font-face {
+    font-family: OpenSans;
+    src: url(OpenSans-LightItalic.ttf);
+    font-weight: normal;
+    font-style: italic;
+}
+@font-face {
+    font-family: OpenSans;
+    src: url(OpenSans-Semibold.ttf);
+    font-weight: bold;
+    font-style: normal;
+}
+@font-face {
+    font-family: OpenSans;
+    src: url(OpenSans-SemiboldItalic.ttf);
+    font-weight: bold;
+    font-style: italic;
+}
+
+body {
+  font-family: OpenSans;
+}
+
+input {
+    font-family: OpenSans;
+}
+
+ul {
+    list-style: none;
+}
+ul, li {
+    margin: 0;
+    padding: 0;
+}
+a img {
+    border: none;
+}
+
+form {
+    display: inline-block;
+}
+.csubmit {
+    position: relative;
+    top: 8px;
+}
+
+*:focus {
+    outline: none;
+}
+#ibodycontainer {
+    margin-right: 60px;
+}
+
+.cinline { 
+    display: inline-block;
+}
+.cclick {
+    cursor: pointer;
+}
+
+#ihint {
+	position: absolute;
+	display: none;
+	bottom: 0;
+	left: 0;
+	background-color: #eee;
+	padding: 2px 10px;
+}
+
+#iresources {
+    display: none;
+}
+
+#iprojects {
+    margin: 0 60px 0 0;
+}
+
+#iprojects h1 {
+    float: left;
+    height: 42px;
+    padding-top: 8px;
+    font-size: 20px;
+    font-weight: bold;
+    margin: 0 15px 15px 0;
+}
+
+.cprojects {
+    display: inline;
+}
+
+.cproject {
+    display: inline-block;
+    height: 50px;
+    background-color: #eee;
+    border-radius: 5px;
+    margin: 0 15px 15px 0;
+}
+
+.cprojectname {
+    padding: 0 15px;
+}
+
+.ccurrentproject {
+    background-color: #888;
+    color: white;
+}
+
+.cprojectnameplain {    
+    display: inline-block;
+    height: 50px;
+    font-size: 24px;
+}
+
+.cformprojectname {
+    display: none;
+    height: 50px;
+}
+
+.cprojectshare {
+	display: inline-block;
+	width: 20px;
+	height: 20px;
+	background: url(share.png) top left no-repeat;
+	margin: 0 0 0 25px;
+}
+
+.cprojecttest {
+	display: inline-block;
+	width: 20px;
+	height: 20px;
+	background: url(test.png) top left no-repeat;
+	margin: 0 0 0 15px;
+}
+
+.cdeletebutton, 
+.cprojectdeletebutton,
+.ctunneladdbutton,
+.cselfsignedbutton
+{
+    display: inline-block;
+    width: 30px;
+    height: 50px;
+    vertical-align: middle;
+    background: url(x.png) left 50% no-repeat;
+    padding: 0 15px 0 0;
+}
+.cconfirmdeletebutton,
+.ccanceldeletebutton,
+.cdeletebutton,
+.ctunneladdbutton,
+.cselfsignedbutton
+{
+    position: relative;
+    top: -8px;
+}
+.ctunneldeletebutton, .ctunnelconfirmdeletebutton
+{
+    position: relative;
+    top: -4px;
+}
+.ctunneladdbutton {
+    background-image: url(tunnel.png);
+	padding: 0 10px 0 0;
+}
+.cselfsignedbutton {
+	background-image: url(certificategreen.png);
+	padding: 0 10px 0 0;
+}
+.cselfsignedok {
+	background-image: url(certificateyellow.png);
+}
+
+.cprojectconfirmdeletebutton, .cprojectcanceldeletebutton { 
+    top: 0;
+}
+
+
+.cconfirmdeletebutton,
+.ccanceldeletebutton
+{
+    display: none;
+    padding: 5px 8px;
+    border-radius: 5px;
+    background: #FF981D; /* livid orange */
+}
+.ccanceldeletebutton {
+    background: #FFC278; /* less orange */
+}
+
+#irule {
+    clear: both;
+    height: 1px;
+    width: 100%;
+    border: 1px dotted silver;
+}
+
+#inewprojectbutton {
+    display: inline-block;
+    width: 50px;
+    height: 50px;
+    background: url(plus.png) top left no-repeat;
+    margin: 0 0 -20px 0;
+} 
+
+#icurrentproject {
+    display: none;
+    position: relative; /* for igo position */
+}
+
+.cinputprojectname {
+    height: 16px;
+    border: 1px solid black;
+    padding: 10px 10px 10px 10px;
+    font-size: 24px;
+}
+
+#icurrentnamewarning {
+    display: none;
+    height: 30px;
+    background: url(warning.png) top left no-repeat;
+    padding: 0 15px 0 40px;
+    color: tomato;
+    font-weight: bold;
+}
+
+.cprojectdeploy {
+    position: relative;
+    top: 8px;
+}
+.cdeploy {
+    left: 5px;
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    margin: 0 15px 0 0;
+    background: url(lred.png) 0 0 no-repeat;
+}
+.cdeploy[enmusterdeploy=all] { background-image: url(lgreen.png); }
+.cdeploy[enmusterdeploy=some] { background-image: url(lyellow.png); }
+.cdeploy[enmusterdeploy=none] { background-image: url(lred.png); }
+.cdeploy[enmusterdeploy=na] { background-image: url(lgrey.png); }
+
+
+#ifolderadd {
+    border: 1px dashed silver;
+    text-align: center;
+    width: 300px;
+    padding: 15px;    
+    margin: 10px 0 0 50px;
+}
+
+#ifolderadd.cdropover {
+    border: 1px solid silver;
+}
+
+#igo {
+    position: absolute;
+    top: 10px;
+    right: 0;
+    width: 50px;
+    height: 50px;
+    background: url('go.png') top left no-repeat;
+}
+#igo.cprojectteston {
+	background-image: url(gotest.png);
+}
+
+#ihelp {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 50px;
+    height: 50px;
+    background: url('help.png') top left no-repeat;
+}
+
+#isettings {
+    position: absolute;
+    top: 10px;
+    right: 70px;
+    width: 50px;
+    height: 50px;
+    background: url('settings.png') top left no-repeat;
+}
+
+#ierror, #iinfo {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    z-index: 1000;
+}
+
+#ierrorbackground, #iinfobackground {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-color: #ccc;
+    opacity: 0.5;
+}
+
+#ierrorcontainer, #iinfocontainer {
+    position: relative;
+    width: 300px;
+    margin: 100px auto 0 auto;
+    border: 2px solid silver;
+    background: white url(warning.png) 10px 10px no-repeat;
+    padding: 10px 10px 100px 50px;    
+}
+#iinfocontainer {
+    background-image: url(info.png);
+    width: 80%;
+}
+.cmessage {
+    word-wrap: break-word;
+}
+.cinfocomplete, 
+.cinfofolder {
+    color: #53a150;
+    font-weight: bold;
+	margin: 5px 0;
+}
+.cinfodeploying {
+    font-weight: bold;
+}
+.cinfoproblem {
+	color: tomato;
+	font-weight: bold;
+}
+
+
+#ierrorclosebutton, #iinfoclosebutton {
+    position: absolute;
+    right: 15px;
+    bottom: 15px;
+    width: 100px;
+    text-align: center;
+    padding: 5px;
+    margin: 15px 5px 5px; 5px;
+    border: 1px solid silver;
+    border-radius: 3px;
+    background: #e8e8e8;
+}
+
+#ifolders {
+    margin: 0 0 0 50px;
+}
+
+#icurrentproject h3 {
+    margin: 0 0 15px 50px;
+    font-size: 18px;
+    font-style: italic;
+    font-weight: normal;
+}
+
+.cfolder {
+    position: relative; /* mainly for cfolderstate position */
+}
+
+.cfolderstate {
+    position: absolute;
+    top: 40px;
+    width: 30px;
+    height: 30px;
+    background: url(aclose.png) top left no-repeat;
+}
+.cfolderstate.cfolderiscollapsed {
+    background-image: url(aopen.png);
+}
+
+.cfoldercollapsed {
+    display: none;
+    background: #f4f4f4;
+    margin: 0 0 10px 50px;
+    padding: 5px;
+    min-height: 25px;
+}
+
+.cfolderhead {
+    height: 30px;
+    margin: 0 0 10px 0;
+}
+
+.cfolderdeploy {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    margin: 0 15px 0 0;
+    background: url(lred.png) 0 0 no-repeat;
+}
+
+.cfoldername {
+    position: relative;
+    top: -8px;
+    display: inline-block;
+    height: 22px;
+    padding: 8px 0;
+    margin: 0 15px 0 0;
+    font-weight: bold;
+    color: #53a150;
+}
+
+.cfolderwarning {
+    display: none;
+    position: relative;
+    top: -8px;
+    height: 30px;
+    background: url(warning.png) top left no-repeat;
+    padding: 4px 15px 4px 40px;
+    margin: 0 15px 0 0;
+    color: tomato;
+    font-weight: bold;    
+}
+
+.cfoldername.cdropover {
+    border: 1px dashed silver;
+}
+
+.csection {
+    background: #f4f4f4;
+    margin: 0 0 10px 50px;
+    padding: 5px;
+}
+
+.cprompt {
+    font-style: italic;
+}
+.cexclusionsprompt {
+    margin: 0;
+}
+.curlsprompt {
+    margin: 0 0 10px 0;
+}
+
+.curls {
+    margin: 0 0 15px 0;
+    z-index: 1000;
+}
+
+.curl {
+    margin: 0 0 5px 0;
+}
+
+.curlhead {
+    height: 30px;
+}
+
+.curldeploy {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    margin: 0 15px 0 0;
+    background: url(lred.png) 0 0 no-repeat;
+}
+
+.cexclusions {
+	margin: 10px 0 0 0;
+}
+
+.cexclusion {
+	display: inline-block;
+	white-space: nowrap;
+}
+
+.cexclusionhead {
+    height: 30px;
+    margin: 0 0 15px 0;
+}
+
+.cexclusionname {
+    position: relative;
+    top: -8px;
+    display: inline-block;
+    height: 22px;
+    padding: 8px 0;
+    margin: 0 15px 0 0;
+    font-weight: bold;
+    color: tomato;
+}
+
+.cexclusionwarning {
+    display: none;
+    position: relative;
+    top: -8px;
+    height: 30px;
+    background: url(warning.png) top left no-repeat;
+    padding: 4px 15px 4px 40px;
+    margin: 0 15px 0 0;
+    color: tomato;
+    font-weight: bold;    
+}
+
+.cexcludepatternshead {
+}
+
+.cexcludepatternsplain {
+    font-weight: bold;
+    color: tomato;
+}
+
+.cformexcludepatterns {
+    display: none;
+}
+
+.cinputexcludepatterns {
+    border: 1px solid black;
+    width: 300px;
+    padding: 10x;
+    font-size: 15px;
+}
+
+.cexclusionadd {
+    border: 1px dashed silver;
+    text-align: center;
+    width: 450px;
+    padding: 5px;    
+    margin: 0;
+}
+
+.cexclusionadd.cdropover {
+    border: 1px solid silver;
+}
+
+.curladd {
+    width: 30px;
+    height: 30px;
+    background: url(plus30.png) top left no-repeat;
+    margin: 0;
+}
+
+.curl {
+    margin: 0 0 5px 0;
+}
+
+.curlhead {
+    height: 30px;
+}
+
+.curldeploy {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    margin: 0 15px 0 0;
+    background: url(lred.png) 0 0 no-repeat;
+}
+
+.curlname,
+.ctunnelname
+{
+    position: relative;
+    top: -8px;
+    display: inline-block;
+    height: 22px;
+    padding: 8px 0;
+    margin: 0 15px 0 0;
+}
+
+.cformurlname {
+    display: none;
+}
+.cinputurlname {
+    border: 1px solid black;
+    font-size: 15px;
+    width: 500px;
+    padding: 6px;
+}
+
+.ctunneldetails {
+    margin: 0 15px 0 0;
+}
+
+.ctunnelcredentials {
+    display: inline-block;
+}
+
+.cinputtunnelhost {
+    border: 1px solid black;
+    font-size: 15px;
+    width: 300px;
+    padding: 6px;
+}
+
+.cinputtunnellogin {
+    border: 1px solid black;
+    font-size: 15px;
+    width: 50px;
+    padding: 6px;
+}
+
+.cinputtunnelkey {
+    display: inline-block;
+    position: relative;
+    top: 11px;
+    width: 170px;
+    height: 20px;
+    border: 1px solid black;
+    font-size: 15px;
+    padding: 6px;
+    overflow: hidden;
+    -webkit-text-security: disc;
+    margin: 0;
+}
+
+.curlnameplain,
+.ctunnelnameplain 
+{
+    font-weight: bold;
+    color: #53a150;
+}
+
+.ctunnel {
+    margin: 0;
+}
+
+.curlwarning {
+    display: none;
+    position: relative;
+    top: -8px;
+    height: 30px;
+    background: url(warning.png) top left no-repeat;
+    padding: 4px 15px 4px 40px;
+    margin: 0 15px 0 0;
+    color: tomato;
+    font-weight: bold;    
+}
+
+.cbullets {
+    list-style-type: disc;
+    margin: 10px 0 0 -10px;
+}
+.cbullets li {
+    margin: 0 0 0 10px;
+}
+
+.chelpme {
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    margin: 0 5px 0 5px;
+    background: url(info15.png) 50% 50% no-repeat;
+}
+
+.crevision, .cmaintenance {
+    margin: 0 0 -18px 0;
+}
+
+.crevisionname, .cmaintenancename {
+    position: relative;
+    top: -8px;
+    display: inline-block;
+    height: 22px;
+    padding: 8px 0;
+    margin: 0 15px 0 0;
+    font-weight: bold;
+    color: #5ab7f8;
+}
+
+.crevisionwarning, .cmaintenancewarning {
+    display: none;
+    position: relative;
+    top: -8px;
+    height: 30px;
+    background: url(warning.png) top left no-repeat;
+    padding: 4px 15px 4px 40px;
+    margin: 0 15px 0 0;
+    color: tomato;
+    font-weight: bold; 
+}
+
+.crevisionadd, .cmaintenanceadd {
+    border: 1px dashed silver;
+    text-align: center;
+    width: 450px;
+    padding: 5px;    
+    margin: 5px 0 0 0;
+}
+
+.crevisionadd.cdropover,
+.cmaintenanceadd.cdropover,
+{
+    border: 1px dashed silver;
+}
+
+.cupgradehead {
+}
+
+.cupgradeplain {
+    font-weight: bold;
+    color: goldenrod;
+}
+
+.cformupgrade {
+    display: none;
+}
+
+.cinputupgrade {
+    border: 1px solid black;
+    width: 300px;
+    padding: 10x;
+    font-size: 15px;
+}
+
+
+/* settings pane */
+.csetting {
+    margin: 0 0 20px 0;
+}
+.csetting input[type=text] {
+    width: 90%;
+}
+
+.csettinghint {
+    font-size: 80%;
+}
+
+#isetpublickey {
+    display: inline-block;
+    width: 90%;
+    height: 50px;
+    font-size: 70%;
+    font-family: OpenSans;
+}
+#isetpublickey.csetpublickeyworking {
+    color: red;
+    font-weight: bold;
+    font-size: 20px;
+}
+
+.csetting label {
+    font-size: 110%;
+    font-weight: bold;
+}
+
+#isetmakekeypair {
+    margin: 5px 0 0 0;
+}
+
+#isetsavekeyresult {
+    font-weight: bold;
+}
+.csetsaveprogress {
+    color: orange;
+}
+.csetsaveerror {
+    color: tomato;
+}
+.csetsavedone {
+    color: darkgreen;
+}

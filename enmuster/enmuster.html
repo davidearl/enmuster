@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>enmuster: a web site deployment tool</title>
+    <link rel="stylesheet" href="enmuster.css" type="text/css">
+    <link rel="stylesheet" href="jquery-ui-1.11.4.custom/jquery-ui.min.css" type="text/css">
+    <script src='jquery-2.1.3.min.js'></script>
+    <script src='jquery-ui-1.11.4.custom/jquery-ui.min.js'></script>
+    <script>
+      var Ngui = require('nw.gui');
+      var Nfs = require('fs');
+      var Nasync = require('async');
+      var Nforge = require("node-forge");
+      var Nprocess = require('process');
+      var Nnet = require('net');
+      var Nssh2 = require('ssh2');
+      var Nrequest = require('request');
+      var Ntemp = require('temp');
+
+      var win = Ngui.Window.get();
+
+      if (Ngui.App.manifest.debug) { win.showDevTools(); }
+      (function(){
+	  var winpos = localStorage.winpos;
+	  if (winpos) { winpos = JSON.parse(winpos); }
+	  else { winpos = {x: 20, y: 20, width: 1000, height: 800}; }
+	  win.x = winpos.x; win.y = winpos.y; win.width = winpos.width; win.height = winpos.height;
+	  this.wintimer = null;
+	  this.winchange = function() {
+              this.wintimer = null;
+	      localStorage.winpos = 
+		  JSON.stringify({x: win.x, y: win.y, width: win.width, height: win.height});
+	  }	
+          this.setwintimer = function() {
+              if (this.wintimer) { clearTimeout(this.wintimer); }
+	      this.wintimer = setTimeout(this.winchange, 100);
+	  }
+	  var me = this;
+          win.on("resize", function(){ me.setwintimer(); });
+          win.on("move", function(){ me.setwintimer(); });
+	  win.on("close", function(){
+	      if (enmuster.helpwindow) { enmuster.helpwindow.close(); }
+	      if (enmuster.settingswindow) { enmuster.settingswindow.close(); }
+	      this.close(true);
+	  });
+      })();
+    </script>
+  </head>
+  <body>
+    <div class='ibodycontainer'>
+	  <div><h3><span style='color:tomato'>Enmuster is beta software!</span> <span class='chelpme' enhash='status'></span></h3></div>
+
+      <div id='iprojects'>
+	    <h1>Enmuster these projects:</h1>	
+        <ul class='cprojects'></ul>
+		<div id='inewprojectbutton' class='cclick' enhint='add new project'></div>
+      </div>
+
+      <hr id='irule'>
+
+      <div id='icurrentproject'>
+		<div id='icurrenthead'>
+		  <div id='icurrentname'>
+            <span id='icurrentdeploy' class='cdeploy cprojectdeploy' enmusterdeploy='all'></span>
+            <span class='cprojectnameplain'></span>
+            <form class='cformprojectname'>
+              <input type='text'class='cinputprojectname' value=''>
+              <input type='image' class='csubmit cinputprojectnamesubmit' src='ok.png'>
+            </form>
+			<div class='cprojectshare cclick' enhint='export project to file'></div>
+			<div class='cprojecttest cclick' enhint='toggle test/live deployment'></div>
+			<input type='file' id='iprojectshare' nwsaveas='' style='display: none;'>
+		  </div>
+          <h3>folders on this computer to be deployed (<span id='ifoldercount'></span>): <span class='chelpme' enhash='folders'></span></h3>
+          <ul id='ifolders' class='cfolders'>
+          </ul>
+          <div id='ifolderadd' class='cfolderadd'>drop folder(s) here to add to project</div>
+		</div>
+        <div id='igo' class='cclick' enhint='DEPLOY PROJECT!'></div>
+      </div>
+    </div>
+	
+    <div id='ihelp' class='cclick' enhint='help'></div>
+    <div id='isettings' class='cclick' enhint='settings'></div>
+	
+    <div id='iinfo'>
+      <div id='iinfobackground'></div>
+      <div id='iinfocontainer'>
+        <div id='iinfomessage' class='cmessage'></div>
+        <div id='iinfohtml' class='cmessage'></div>
+        <div id='iinfoclosebutton' class='cclick'>close</div>
+      </div>
+    </div>
+	
+    <div id='ierror'>
+      <div id='ierrorbackground'></div>
+      <div id='ierrorcontainer'>
+        <div id='ierrormessage' class='cmessage'></div>
+        <div id='ierrorhelplink' style='display: none;'><span class='chelpme' enhash=""></span></div>
+        <div id='ierrorclosebutton' class='cclick'>close</div>
+      </div>
+    </div>
+	
+    <div id='iresources'>
+      <ul id='pproject'>
+        <li class='cproject cclick'>
+		  <span class='cprojectname'></span>
+          <span class='cprojectconfirmdeletebutton cprojectreallydeletebutton cconfirmdeletebutton cclick'>
+            Delete</span>
+          <span class='cprojectconfirmdeletebutton cprojectcanceldeletebutton ccanceldeletebutton cclick'>
+            Don't delete<!--'--></span>
+          <span class='cprojectdeletebutton cclick' enhint='delete project...'></span>
+        </li>
+      </ul>
+
+      <ul id='pfolder'>
+        <li class='cfolder'>
+          <div class='cfolderstate cclick' enhint='suspend/resume deployment of this folder'></div>
+          <div class='cfolderhead'>
+            <span class='cdeploy cfolderdeploy' enmusterdeploy='all'></span>
+            <span class='cfoldername'></span>
+            <span class='cfolderwarning'>Folder no longer exists</span>
+            <span class='cfolderconfirmdeletebutton cfolderreallydeletebutton cconfirmdeletebutton cclick'>Remove</span>
+            <span class='cfolderconfirmdeletebutton cfoldercanceldeletebutton ccanceldeletebutton cclick'>Don't remove<!--'--></span>
+            <span class='cfolderdeletebutton cdeletebutton cclick' enhint='remove folder from project'></span>
+          </div>
+          <div class='cfoldercollapsed'><!-- an abbreviated version of what follows --></div>
+          <div class='cexclusionshead csection'>
+			<div class='cprompt cexclusionsprompt'>except for specific files and subfolders (e.g. locations for user files, config files or log files): 
+			  <span class='chelpme' enhash='exclusions'></span>
+			</div>
+			<ul class='cexclusions'></ul>
+			<div class='cexclusionadd'>drop folder/file here to exclude from being deployed</div>
+          </div>
+          <div class='cexcludepatternshead csection'>
+            <span class='cprompt'>files/folders also excluded:
+              <span class='chelpme' enhash='exclusions-patterns'></span>
+            </span> 
+            <span class='cexcludepatternsplain'></span>
+            <form class='cformexcludepatterns'>
+              <input type='text' class='cinputexcludepatterns' value=''>
+              <input type='image' class='csubmit cinputexcludepatternssubmit' src='ok.png'>
+            </form>
+          </div>
+          <div class='curlshead csection'>
+			<div class='cprompt curlsprompt'>deploy this folder via these URLs:
+			  <span class='chelpme' enhash='urls'></span>
+			</div>
+			<ul class='curls'></ul>
+			<div class='curladd cclick' enhint='add new URL to this folder'></div>
+          </div>
+          <div class='crevisionhead csection'>
+            <div class='cprompt crevisionprompt'>automatically update revision number in this file 
+              (on the server):
+			  <span class='chelpme' enhash='revisions'></span>
+			</div>
+            <div class='crevisionadd'>drop file here to automate revision number</div>
+            <div class='crevision'>
+              <span class='crevisionname'></span>
+              <span class='crevisionwarning'>File no longer exists locally</span>
+              <span class='crevisionconfirmdeletebutton crevisionreallydeletebutton cconfirmdeletebutton cclick'>Stop revision numbering</span>
+              <span class='crevisionconfirmdeletebutton crevisioncanceldeletebutton ccanceldeletebutton cclick'>Don't stop<!--'--></span>
+              <span class='crevisiondeletebutton cdeletebutton cclick' enhint='stop revision numbering'></span>
+            </div>
+          </div>
+          <div class='cupgradehead csection'>
+            <span class='cprompt'>upgrade using new files only, matching:
+              <span class='chelpme' enhash='upgrade'></span>
+            </span> 
+            <span class='cupgradeplain'></span>
+            <form class='cformupgrade'>
+              <input type='text' class='cinputupgrade' value=''>
+              <input type='image' class='csubmit cinputupgradesubmit' src='ok.png'>
+            </form>
+          </div>
+          <div class='cmaintenancehead csection'>
+            <div class='cprompt cmaintenanceprompt'>turn maintenance mode on and off using this file: 
+			  <span class='chelpme' enhash='maintenance'></span>
+			</div>
+            <div class='cmaintenanceadd'>drop file here to be run on server before and after upload</div>
+            <div class='cmaintenance'>
+              <span class='cmaintenancename'></span>
+              <span class='cmaintenancewarning'>File no longer exists locally</span>
+              <span class='cmaintenanceconfirmdeletebutton cmaintenancereallydeletebutton cconfirmdeletebutton cclick'>Stop setting maintenance</span>
+              <span class='cmaintenanceconfirmdeletebutton cmaintenancecanceldeletebutton ccanceldeletebutton cclick'>Cancel</span>
+              <span class='cmaintenancedeletebutton cdeletebutton cclick' enhint='stop setting maintenance'></span>
+            </div>
+          </div>
+        </li>
+      </ul>
+	  
+      <ul id='purl'>
+        <li class='curl'>
+          <div class='curlhead'>
+            <span class='cdeploy curldeploy' enmusterdeploy='all'></span>
+            <span class='curlname'>
+              <span class='curlnameplain'></span>
+              <form class='cformurlname'>
+                <input type='text' class='cinputurlname' value='' 
+                        placeholder='paste url here (type if you must) and press Enter'>
+                <input type='image' class='csubmit cinputurlnamesubmit' src='ok.png'>
+              </form>
+            </span>
+            <span class='curlwarning'>URL not contactable</span>
+			<span class='cselfsignedbutton cclick' style='display: inline-block;' enhint='self-signed certificates permitted when yellow'></span>
+            <span class='ctunneladdbutton cclick' style='display: inline-block;' enhint='connect via tunnel'></span>
+            <span class='curlconfirmdeletebutton curlreallydeletebutton cconfirmdeletebutton cclick'>Remove</span>
+            <span class='curlconfirmdeletebutton curlcanceldeletebutton ccanceldeletebutton cclick'>Don't remove<!--'--></span>
+            <span class='curldeletebutton cdeletebutton cclick' enhint='remove URL from folder'></span>
+          </div>
+          <div class='ctunnel'>
+            <span class='cprompt'>via tunnel:
+			  <span class='chelpme' enhash='tunnels'></span>
+			</span>
+            <span class='ctunneldetails'>
+              <span class='ctunnelnameplain'></span>
+              <form class='cformtunnelcredentials' style='display: inline-block;'>
+                <input type='text' class='cinputtunnellogin' value='' placeholder='user'>
+                <!--<input type='password' class='cinputtunnelkey' placeholder='private key or p/w'>-->
+                <textarea class='cinputtunnelkey' placeholder='private key or p/w'></textarea>
+                <input type='text' class='cinputtunnelhost' placeholder='tunnel domain[:port]'>
+                <input type='image' class='csubmit cinputtunnelsubmit' src='ok.png'>
+              </form>
+            </span>
+            <span class='ctunnelconfirmdeletebutton ctunnelreallydeletebutton cconfirmdeletebutton cclick'>Remove tunnel</span>
+            <span class='ctunnelconfirmdeletebutton ctunnelcanceldeletebutton ccanceldeletebutton cclick'>Don't remove<!--'--></span>
+            <span class='ctunneldeletebutton cdeletebutton cclick' enhint='remove tunnel connection'></span>
+          </div>
+        </li>
+      </ul>
+	  
+      <ul id='pexclusion'>
+        <li class='cexclusion'>
+          <div class='cexclusionhead'>
+            <span class='cexclusionname'></span>
+            <span class='cexclusionwarning'>Exclusion does not exist</span>
+            <span class='cexclusionconfirmdeletebutton cexclusionreallydeletebutton cconfirmdeletebutton cclick'>Remove</span>
+            <span class='cexclusionconfirmdeletebutton cexclusioncanceldeletebutton ccanceldeletebutton cclick'>Don't remove<!--'--></span>
+            <span class='cexclusiondeletebutton cdeletebutton cclick' enhint='remove exclusion'></span>
+          </div>
+        </li>
+      </ul>
+	  
+    </div>
+
+	<div id='ihint'></div>
+  </body>
+  <script src='projects.js'></script>
+  <script src='manifest.js'></script>
+  <script src='enmuster.js'></script>
+  <script>
+    $(function(){
+	projects = Projects.Load();
+	enmuster.init();
+    });
+  </script>
+</html>

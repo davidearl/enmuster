@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>enmuster: settings</title>
+    <link rel="stylesheet" href="enmuster.css" type="text/css">
+    <link rel="stylesheet" href="jquery-ui-1.11.4.custom/jquery-ui.min.css" type="text/css">
+    <script src='jquery-2.1.3.min.js'></script>
+    <script src='jquery-ui-1.11.4.custom/jquery-ui.min.js'></script>
+	<style>
+h1 {
+  vertical-align: middle;
+}
+#iversion {
+  position: relative;
+  font-size: 50%;
+}
+	</style>
+  </head>
+  <body>
+    <h1><img src='enmuster48.png'> Enmuster settings <span id='iversion'></span></h1>
+    <div class='csettings'>
+      <div class='csetting'>
+		<label for='isetclientname'>Client name</label><br>
+		(this identifies you to the server(s), in particular with your public key - see below)<br>
+		<input type='text' id='isetclientname' value=''><br>
+	  </div>
+	  <div class='csetting'>
+		<label for='isetpublickey'>Your public key</label><br>
+		Copy or save this into a file called 
+		<strong><em><span class='cclientname'></span>.pem</em></strong> in each server's<!--'-->
+		enmuster data directory<span class='chelpme' enhash='security-authentication'></span>. 
+		This is what allows access to your server(s):</label><br>
+		<textarea id='isetpublickey' readonly></textarea><br>
+		<input type='button' id='isetsavekeybutton' value='Save public key to a file'>
+		<span id='isetsavekeyresult'></span>
+		<input type='file' id='isetsavekey' nwsaveas='' style='display: none;'><br>
+		<input type='button' id='isetmakekeypair' value='Make a new key pair'>
+		<span class='csettinghint'>(this will take a short while and require replacing keys on all servers)</span>
+	  </div>
+	  <div class='csetting'>
+		<label for='isetlocalport'>Local port to use for tunnels</label><br/>        
+		<input type='text' id='isetlocalport' value=''><br>
+		<span class='csettinghint'>unlikely you'll<!--'--> need to change this</span>
+	  </div>
+	  <div class='csetting'>
+		<label for='isetlocalport'>Enmuster Server code</label><br/>        
+		<input type='button' id='isetserverbutton' value='Get web server script'>
+		<input type='file' id='isetserver' nwsaveas='index.php' style='display: none;'><br>
+		<span class='csettinghint'>instructions for installing are in the file</span>
+	  </div>
+	</div>
+  </body>
+  <script src='projects.js'></script>
+  <script>
+    var enmuster = null;
+    var Nfs = require('fs');
+    function setkey() {
+		$("#isetpublickey").addClass("csetpublickeyworking").val("working, please wait...");
+	    setTimeout(function(){
+            $("#isetpublickey").removeClass("csetpublickeyworking").val(enmuster.getpem()).select().focus();
+	    }, 1);
+    }
+    function setclient() {
+        $(".cclientname").text(enmuster.getClient());
+	    $("#isetsavekey").attr("nwsaveas", enmuster.getClient()+".pem");
+    }
+    function parentenmuster(e) { 
+	    enmuster = e;
+	    setkey();
+	    setclient();
+
+	    $("#isetclientname").val(enmuster.getClient()).on("change", function(){
+            enmuster.saveClient($(this).val());
+	        setclient();
+	    });
+	    $("#isetlocalport").val(Tunnel.GetLocalPort()).on("change", function(){
+            Tunnel.SaveLocalPort($(this).val());
+	    });
+        $("#isetsavekeybutton").click(function(){
+	        // see https://github.com/nwjs/nw.js/wiki/File-dialogs
+	        $("#isetsavekey").trigger("click");
+	    });
+        $("#isetsavekey").change(function(){
+	        if ($(this)[0].files.length == 0) { return; }
+	        $("#isetsavekeyresult").addClass("csetsaveprogress").text("saving...");
+	        Nfs.writeFile($(this)[0].files[0].path /* not usually available, only in nw.js */, 
+ 	            enmuster.getpem(),
+		        function(err){ 
+					$("#isetsavekeyresult").removeClass("csetsaveprogress").
+						addClass(err ? "csetsaveerror" : "csetsavedone").
+						text(err ? "cannot write to that file" : "saved!");
+				});
+			$(this).val("");
+		});
+		$("#isetmakekeypair").click(function(){
+			delete localStorage.publicpem;
+			delete localStorage.privatepem;
+			$("#isetsavekeyresult").text("");
+			setkey();
+		});
+		$("#isetserverbutton").click(function(){
+			$("#isetserver").trigger("click");
+		});
+		$("#isetserver").change(function(){
+			if ($(this)[0].files.length == 0) { return; }
+			var path = $(this)[0].files[0].path; /* not usually available, only in nw.js */
+			Nfs.readFile("enmusterserver_index.php", // what about the path when zipped?
+						 function(err, data){
+							 if (err) { alert("can't find Enmuster Server file"); return; }
+							 Nfs.writeFile(path, data, function(err){ if (err) { alert("can't save file"); return; } });
+						 });
+			$(this).val("");
+		});
+		
+		$(".chelpme").click(function(e){
+			enmuster.help($(this).attr("enhash"));
+		});
+		
+    }
+    $(function(){
+	    var Ngui = require('nw.gui');
+		Ngui.Window.get().focus();
+		$("#iversion").text("version "+Ngui.App.manifest.version);
+	});
+</script>
+</html>
