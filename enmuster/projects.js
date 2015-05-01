@@ -569,7 +569,7 @@ var Url = {
 		}
 		var requestops = {url: this.posturl,
 						  headers: {"Host": this.virtualhost,
-									"User-Agent": "enmuster/0.1"},
+									"User-Agent": Util.getUserAgent() },
 						  strictSSL: this.strictSSL,
 						  method: "POST",
 						  encoding: "utf8"};

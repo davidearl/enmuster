@@ -44,6 +44,9 @@ var Util = {
 
 	init: function(){
 	},
+
+	getUserAgent: function(){ return Ngui.App.manifest["user-agent"]; },
+	getVersion: function(){ return Ngui.App.version; },
 }
 
 var enmuster = {
@@ -737,6 +740,24 @@ var enmuster = {
 	setdebug: function() {
 		enmuster.dodebug = true;
 		win.showDevTools();
+	},
+
+	checkforupdates: function() {
+		if (localStorage.nextversioncheck &&
+			Date.now() < parseInt(localStorage.nextversioncheck)) { return; }
+		Nrequest({url: "http://enmuster.net/installers/latest.json", 
+				  headers: {"User-Agent": Util.getUserAgent()}, method: "GET", encoding: "utf8"},
+				 function(err, response, content){
+					 if (err || response.statusCode != 200) { return; }
+					 try{
+						 var j = JSON.parse(content);
+						 if (j.version != Util.getVersion()) {
+							 enmuster.showinfo("A message from Enmuster");
+							 enmuster.appendinfo(j.info);
+						 }
+						 localStorage.nextversioncheck = Date.now() + 7 * 24 * 60 * 60 * 1000; // a week
+					 } catch(err){}
+				 });
 	},
 
     init: function() {
