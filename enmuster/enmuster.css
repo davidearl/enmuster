@@ -141,6 +141,7 @@ form {
 .cdeletebutton, 
 .cprojectdeletebutton,
 .ctunneladdbutton,
+.curlsyncbutton,
 .cselfsignedbutton
 {
     display: inline-block;
@@ -154,6 +155,7 @@ form {
 .ccanceldeletebutton,
 .cdeletebutton,
 .ctunneladdbutton,
+.curlsyncbutton,
 .cselfsignedbutton
 {
     position: relative;
@@ -166,6 +168,10 @@ form {
 }
 .ctunneladdbutton {
     background-image: url(tunnel.png);
+	padding: 0 10px 0 0;
+}
+.curlsyncbutton {
+    background-image: url(sync.png);
 	padding: 0 10px 0 0;
 }
 .cselfsignedbutton {

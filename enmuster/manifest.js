@@ -7,6 +7,7 @@ var ManifestItem = {
 	isWritable: function() { return this.writable; },
 	getname: function() { return this.name; },
 	UtimeToMtime: function(utime) { return Math.floor(utime/1000); },
+	MtimeToUtime: function(mtime) { return mtime*1000; },
 };
 
 
@@ -35,10 +36,12 @@ ManifestFile.Factory = function(o) {
 	f.writable = o.writable;
 	f.size = o.size;
 	f.mtime = o.mtime;
+	if ("digest" in o) { f.digest = o.digest; }
 	return f;
 };
 ManifestFile.bald = function() {
 	var o = {name: this.name, writable: this.writable, size: this.size, mtime: this.mtime};
+	if (this.digest) { o.digest = f.digest; }
 	if (this.isdrop) { o.isdrop = this.isdrop; }
 	if (this.isnew) { o.isnew = this.isnew; }
 	if ("filenumber" in this) { o.filenumber = this.filenumber; }
@@ -61,7 +64,7 @@ ManifestOther.bald = function() {
 
 var Manifest = {
 	/* manifest, from the server, looks like this: 
-	   [ { name: 'leafname', date: timestamp, writable: true, size: bytes},
+	   [ { name: 'leafname', date: timestamp, writable: true, size: bytes, digest: digest},
 	   { name: 'leafname', date: timestamp, writable: true, folder: [...recursively...]},
 	   { name: 'leafname', writable: true, link: 'target' },
 	   { name: 'leafname', writable: true, unknown: true },

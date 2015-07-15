@@ -15,6 +15,7 @@
       var Nnet = require('net');
       var Nssh2 = require('ssh2');
       var Nrequest = require('request');
+      var Nmd5 = require('MD5');
       var Ntemp = require('temp');
 
       var win = Ngui.Window.get();
@@ -48,8 +49,6 @@
   </head>
   <body>
     <div class='ibodycontainer'>
-	  <div><h3><span style='color:tomato'>Enmuster is beta software!</span> <span class='chelpme' enhash='status'></span></h3></div>
-
       <div id='iprojects'>
 	    <h1>Enmuster these projects:</h1>	
         <ul class='cprojects'></ul>
@@ -204,6 +203,7 @@
             <span class='curlwarning'>URL not contactable</span>
 			<span class='cselfsignedbutton cclick' style='display: inline-block;' enhint='self-signed certificates permitted when yellow'></span>
             <span class='ctunneladdbutton cclick' style='display: inline-block;' enhint='connect via tunnel'></span>
+            <span class='curlsyncbutton cclick' enhint='synchronise local file times from this url'></span>
             <span class='curlconfirmdeletebutton curlreallydeletebutton cconfirmdeletebutton cclick'>Remove</span>
             <span class='curlconfirmdeletebutton curlcanceldeletebutton ccanceldeletebutton cclick'>Don't remove<!--'--></span>
             <span class='curldeletebutton cdeletebutton cclick' enhint='remove URL from folder'></span>

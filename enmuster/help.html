@@ -26,12 +26,12 @@
 	<img src='go.png'> to deploy changes to a project. A change means
 	a file whose date or size differs between your local and remote copies.</p>
 
-	<p style='color: tomato'><strong>Enmuster is Beta
-	software.</strong> Enmuster's purpose is to replace and delete
+	<p style='color: tomato'><strong>Warning:</strong>
+	Enmuster's purpose is to replace and delete
 	files on your server and possibly execute some of them. If that
 	doesn't work properly, you could lose files. Make sure you have a
-	backup. If the authentication desn't work as intended, nasty
-	people could get access to your server. Use at your own risk. <a href='#bugs'>Known bugs</a>.</p>
+	backup. If the authentication doesn't work as intended, nasty
+	people could get access to your server. Use at your own risk.</p>
 
     <p>The intention is that you have one or more local copies in a
     folder/directory and you need to transfer your changes to the web
@@ -54,6 +54,7 @@
 	  &bull;&nbsp;<a href='#maintenance'>Maintenance mode</a>
 	  &bull;&nbsp;<a href='#upgrade'>Upgrading</a>
 	  &bull;&nbsp;<a href='#settings'>Settings</a>
+	  &bull;&nbsp;<a href='#bugs'>Known bugs</a>
 	  &bull;&nbsp;<a href='#credits'>Credits</a>
 	</p>
 
@@ -78,6 +79,12 @@
     href='http://tortoisesvn.net/'>TortoiseSVN</a>,
     because it constantly uploads and downloads its database file, and
     occasionally this gets corrupted (bad news).</p>
+
+	<p><a href='http://www.ansible.com/home'>Ansible</a> is a good
+	option for large scale deployment, but it is overkill for just one
+	or two instances of a web site. You end up effectively writing
+	"scripts" in their YAML-based language. The version with a UI is
+	beyond the financial reach of small projects.</p>
 
     <p>The worst strategy is, of course, noting which files have
     changed and copying them manually using programs like WinSCP 
@@ -107,8 +114,13 @@
 
     <p>The client lets you say what files to deploy and where. You can also</p>
 	<ul>
-	  <li>test deployments (using <img src='gotest.png'>) without actually
+	  <li><em><a href='#deployment'>test</a></em> deployments 
+	  (using <img src='gotest.png'>) without actually
 	  making any changes on the server,</li>
+
+	  <li><em><a href='#synchronisation'>synchronise</a></em> times
+	  from server (using <img src='sync.png'>), 
+	  which often helps when first setting up,</li>
 
 	  <li>automatically increment a <em><a href='#revisions'>revision
 	  number</a></em> in a file each time you deploy,</li>
@@ -161,7 +173,12 @@
 	<p>Here's what happens for each	URL/folder combination:</p>
 
 	<ol>
-	  <li>A connection to the server identified by the URL is made
+	  <li>The <a href='#revisions'>revision number</a> for the folder
+	  is updated locally, if required. As this will also update that
+	  file's time stamp, it will subsequently be uploaded like any
+	  other changed file.</li>
+
+	  <li>A connection to the server identified by each URL is made
 	  (through a <a href='#tunnels'>tunnel</a> if you have asked for one). This can only
 	  succeed if your <a href='#security-authentication'>public
 	  key</a> is present on the server.</li>
@@ -195,9 +212,6 @@
 	  remove files. Files for removal or which would be overwritten
 	  are moved to a backup directory the Enmuster Data Directory as a
 	  precaution.</li>
-
-	  <li>The <a href='#revisions'>revision number</a> is updated on
-	  the server, if required.</li>
 
 	  <li>Any <a href='#upgrade'>upgrade</a> required is carried out,
 	  on the server.</li>
@@ -236,6 +250,30 @@
 	your <em class='ccode'>php.ini</em> file on the server and update the values
 	there instead. If you can't do either, you need to complain to
 	your provider.</p>
+
+	<h4 id='synchronisation'>Synchronisation</h4>
+
+	<p>When the synchronisation button (<img src='sync.png'>) for a
+	particular URL is pressed, local files in the relevant folder
+	which are the same as those on the server identified by the URL
+	have their time stamps set to those one the server. Files which
+	are different, or missing on the server, will be identified but
+	not changed. "The same" means the files are the same size and have
+	the same content as determined by their md5 signatures.</p>
+
+	<p>This is often helpful when first setting up from an existing
+	collection of files because thereafter deployment is based on
+	similar sizes and times as described above.</p>
+
+	<p>It is also useful to determine which files do actually differ
+	whatever their time stamps happen to be, again typically when
+	first setting up.</p>
+
+	<p>Notice this is done for a particular URL as, if there is more
+	than one, files at each would have their own time
+	stamps. Generally you'll want to set the times to those latest,
+	though sometimes there is a mixture of times, so some manual
+	sorting out will be required.</p>
 
 	<h3 id='security'>Security</h3>
 
@@ -548,8 +586,9 @@
 
 	  <li>To <strong>allow</strong> connection to a URL with a <a
 	  href='#selfsigned'>self-signed certificate (q.v.)</a>,
-	  <strong>remove</strong> a URL, click <img
-	  src='certificategreen.png'>.</li>
+	  click <img src='certificategreen.png'>.</li>
+
+	  <li>See also <a href='#synchronisation'>synchronisation</a> <img src='sync.png'> of file times.</li>
 
 	</ul>
 	
@@ -749,7 +788,7 @@
 	<a id='error-revisions'></a>
 	<h3 id='revisions'>Revision numbering</h3>	
 
-    <p>Each time you deploy changes, you can arrange to automatically
+    <p>Each time you deploy changes for a folder, you can arrange to automatically
     increment a revision number stored in one of your files. That file
     can then be read or executed by other components of your site, to
     display it on an "about" page, for example. Another helpful use
@@ -782,28 +821,20 @@
 	folder by dragging the file (<em class='ccode'>revision.php</em> in our example)
 	from your computer's file browser to the space provided.</p>
 
-	<p>When this is set, at the end of each deployment (after
-	uploading files, but before upgrading), Enmuster locates the file
-	on the server and looks for lines containing <em
+	<p>When this is set, before uploading to any URLs, Enmuster locates the file
+	and looks for the first line containing <em
 	class='ccode'>~revision~</em>. It then looks for the first decimal
 	number following, and replaces it with the next number in
-	sequence. Enmuster replaces the numbers on every line of the file
-	containing <em class='ccode'>~revision~</em> if there's more than
-	one such line, but only the first number following it on each such
-	line. There can be anything non-numeric on the same line between
-	the two.</p>
+	sequence. There can be anything non-numeric on the same line between
+	<em	class='ccode'>~revision~</em> and the number.</p>
 
     <p>To <strong>get the ball rolling</strong>, you'd want to include
     a file containing</p>
 	<pre>      ... ~revision~ ... 0 ...</pre>
-	<p>in your local folder. That way, it will be incremented to
-    1 on the first deployment. You can also reset the number locally,
-    but bear in mind this may affect colleagues working on the same
-    project. Also if you <strong>change</strong> the date or size of
-    the file then it will be uploaded again with the number that
-    happens to be in it, and then incremented. Therefore, you might
-    also want to <a href='#exclusions'>make an exception</a> to prevent this file from being
-    uploaded in normal circumstances.</p>
+	<p>in your local folder. That way, it will be incremented to 1 on
+	the first deployment. You can also reset the number just by
+	editing the file, but bear in mind this may affect colleagues
+	working on the same project.</p>
 
 	<h3 id='upgrade'>Upgrading</h3>
 
@@ -936,6 +967,10 @@
 	  <em>never</em> existed locally and was potentially not for
 	  deletion. Make sure you do a <a href='#deployment'>trial</a>
 	  first!</li>
+
+	  <li>The check for new versions in 0.1.1 wasn't quite right, so
+	  it would falsely notify about a new version available once a
+	  week.</li>
 	</ul>
 
 	<h3 id='credits'>Credits</h3>
@@ -960,6 +995,7 @@
 	  <li><a class='cexlink' href='https://www.npmjs.com/package/request'>request</a> (<a class='cexlink' href='http://opensource.org/licenses/Apache-2.0'>Apache2 License</a>)</li>
 	  <li><a class='cexlink' href='https://www.npmjs.com/package/ssh2'>ssh2</a></li>
 	  <li><a class='cexlink' href='https://www.npmjs.com/package/temp'>temp</a></li>
+	  <li><a class='cexlink' href='https://www.npmjs.com/package/MD5'>MD5</a> (<a class='cexlink' href='https://www.npmjs.com/package/MD5#license'>license</a>)</li>
 	  <li>Windows installer <a class='cexlink' href='http://www.jrsoftware.org/isinfo.php'>Inno Setup</a> (which has its own <a class='cexlink' href='http://www.jrsoftware.org/files/is/license.txt'>license</a>)</li>
 	</ul>
 

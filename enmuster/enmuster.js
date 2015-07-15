@@ -46,7 +46,7 @@ var Util = {
 	},
 
 	getUserAgent: function(){ return Ngui.App.manifest["user-agent"]; },
-	getVersion: function(){ return Ngui.App.version; },
+	getVersion: function(){ return Ngui.App.manifest.version; },
 }
 
 var enmuster = {
@@ -55,7 +55,8 @@ var enmuster = {
 		/* in response to the big orange button, run the current project (i.e. deploy its files) */
 		this.showinfo(""); // so we can append to it
 		try {
-			projects.currentProject().deployProject(
+			var cp = projects.currentProject();
+			cp.deployProject(
                 {clientName: this.getClient(), 
 				 error: this.showerror,
 				 progress: this.appendinfo,
@@ -91,8 +92,9 @@ var enmuster = {
 		$("#icurrentproject").show();
 		$(".cprojectnameplain").text(project.name);
 		$("#ifoldercount").text(project.lengthFolders() > 0 ? project.lengthFolders() : "none yet");
-		$("#igo").toggleClass("cprojectteston", project.testmode).attr("enhint", project.testmode ? "test project deployment" : "DEPLOY PROJECT!");
-		
+		$("#igo").
+			toggleClass("cprojectteston", project.testmode == "test").
+			attr("enhint", project.testmode == "test" ? "test project deployment" : "DEPLOY PROJECT!");
 		var jf = $("#ifolders").empty();
 		
 		project.eachFolder(function(folder){
@@ -473,7 +475,28 @@ var enmuster = {
 		projects.save();
 		this.redraw();
     },
-
+	syncurl: function(jurl) {
+		var project = projects.currentProject();
+		var ifolder = jurl.closest(".cfolder").index();		
+		var folder = projects.getFolderOfCurrent(ifolder);
+		var url = projects.getUrlOfCurrent(ifolder, jurl.index());
+		
+		this.showinfo(""); // so we can append to it
+		try {
+			url.syncFromUrl( 
+                {clientName: this.getClient(), 
+				 error: this.showerror,
+				 progress: this.appendinfo,
+				 encrypt: this.encrypt, decrypt: this.decrypt,
+				 privateKey: this.getprivatekey()}, 
+				project, folder,
+				function(err){
+					if (err) { enmuster.showerror(err); }
+				});
+		} catch(err) {
+			enmuster.showerror(err);
+		}
+	},
 
     getClient: function() {
 		/* make a clientname if we don't have one already */
@@ -560,7 +583,7 @@ var enmuster = {
 
 	testproject: function(jel){
 		var cp = projects.currentProject();
-		cp.setTestMode(! cp.testmode);
+		cp.setTestMode(cp.testmode == "test" ? "live" : "test");
 		projects.save();
 		this.drawproject(projects.currentProject());
 	},
@@ -675,6 +698,7 @@ var enmuster = {
     help: function(anchor) {   
 		if (enmuster.helpwindow) { 
 			enmuster.helpwindow.show();
+			if (anchor) { enmuster.helpwindow.window.location.hash = anchor; }
 		} else {
 			var helppos = localStorage.helppos ? JSON.parse(localStorage.helppos) : 
 				{width: 1000, height: 600, x: 20, y: 20};
@@ -861,6 +885,9 @@ var enmuster = {
 			}).
 			on("click", ".curldeletebutton", function(e){
 				enmuster.deleteurl($(this).closest(".curl"));
+			}).
+			on("click", ".curlsyncbutton", function(e){
+				enmuster.syncurl($(this).closest(".curl"));
 			}).
 			on("click", ".curlreallydeletebutton", function(e){
 				enmuster.reallydeleteurl($(this).closest(".curl"));

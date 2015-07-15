@@ -186,7 +186,7 @@ class enmuster {
     $session = self::getsession();
     self::log(sprintf("MAINTENANCE ON: %s %s %s\nclient: %s\nproject: %s (%s)\ntoken: %s\n",
                       date('Y-m-d-H-i-s'), empty($_SERVER['HTTPS']) ? 'http' : 'https', 
-                      $session->live ? 'LIVE' : 'TEST',
+                      $session->mode,
                       $session->client,
                       $session->project, empty($session->target) ? '-no target-' : $session->target, 
                       $session->token));
@@ -196,8 +196,8 @@ class enmuster {
   static function do_manifest() {
     self::log("manifest\n");
     echo self::httpencrypt(json_encode(
-      self::directory(self::getprojectpath(), self::getexclusions(), '')
-    ));
+      self::directory(self::getprojectpath(), self::getexclusions(), '', ! empty($_POST['digest'])
+    )));
   }
 
   static function do_upload() {
@@ -216,11 +216,6 @@ class enmuster {
     $manifest = json_decode(self::httpdecrypt($_POST['manifest']));
     if ($manifest === FALSE) { self::oops403('could not decode manifest'); }
     enmuster::update($manifest);
-  }
-
-  static function do_revision() {
-    self::log("revision\n");
-    echo self::httpencrypt(json_encode(self::updaterevision()));
   }
 
   static function do_upgrade() {
@@ -335,7 +330,7 @@ EOD;
     return ENMUSTER_DATA_DIRECTORY;
   }
 
-  static function generate_session($client, $project, $target, $live) {
+  static function generate_session($client, $project, $target, $mode) {
     /* creates the session file and credentials for ongoing communication */
     $pempath = sprintf('%s/%s.pem', self::data(), $client);
     if (! file_exists($pempath)) { self::oops("public key missing: you need to install your public key on the server's enmuster data directory as '{$client}.pem'", 'ssl'); }
@@ -364,7 +359,7 @@ EOD;
     /* save other information in the session file for later use */
     $jo->client = $client;
     $jo->project = $project;
-    $jo->live = $live;
+    $jo->mode = $mode;
     if (! empty($target)) { $jo->target = $target; }
     if (! @file_put_contents(self::sessionpath($jo->token), json_encode($jo))) {
       /* we already checked existence and writing in principle, so this shouldn't happen, so a more
@@ -377,7 +372,7 @@ EOD;
     exit;
   }
 
-  static function directory($dirpath, $exclusions, $relpath) {
+  static function directory($dirpath, $exclusions, $relpath, $digest=FALSE) {
     /* recursive scan of the target site files to create a manifest */
     $files = array();
     $d = dir($dirpath);
@@ -392,10 +387,11 @@ EOD;
       $file->writable = is_writable($path);
       if (is_dir($path)) {
         $file->mtime = filemtime($path);
-        $file->folder = self::directory($path, $exclusions, $rel);
+        $file->folder = self::directory($path, $exclusions, $rel, $digest);
       } else if (is_file($path)) {
         $file->size = filesize($path);
         $file->mtime = filemtime($path);
+	if ($digest) { $file->digest = md5_file($path); }
       }  else if (is_link($path)) {
         $file->link = readlink($path);
       } else {
@@ -525,7 +521,7 @@ EOD;
       self::oops("maintenance file '{$name}' does not start #! or <".'?\php', 'maint');
     }
     /* SO THIS IS POTENTIALLY RATHER DANGEROUS: */
-    if ($session->live) {
+    if ($session->mode == 'live') {
       shell_exec(sprintf('cd %s ; %s %s', escapeshellarg($dir), $path, $onoff));
     }
   }
@@ -598,7 +594,7 @@ EOD;
         if ($isdirectory !== isset($el->folder)) { 
           self::oops("'{$path}' is a folder not a file or vice-versa!");
         }
-        if ($session->live) {
+        if ($session->mode == 'live') {
           $logthis = 'deleted';
           self::backupfileorfolder($path, $relpath, $el);
         } else {
@@ -608,7 +604,7 @@ EOD;
         $log[] = sprintf("{$logthis} %s ...%s%s", $isdirectory ? 'directory' : 'file', $relpath, $el->name);
       } else if (isset($el->folder)) {
         if (! file_exists($path)) {
-          if ($session->live) {
+          if ($session->mode == 'live') {
             $logthis = 'created';
             if (! @mkdir($path, 0755)) { self::oops("cannot make directory '{$path}'"); }
             if (! @touch($path, $el->mtime)) { self::oops("cannot set modified time for '{$path}'"); }
@@ -627,19 +623,19 @@ EOD;
           if (! is_file($path)) { 
             self::oops("when trying to replace file {$path}, it is currently a directory"); 
           }
-          if ($session->live) {
+          if ($session->mode == 'live') {
             $logthis = 'replaced';
             self::backupfileorfolder($path, $relpath, $el);
           } else {
             $logthis = 'would have replaced';
           }
         } else {
-          $logthis = $session->live ? 'added' : 'would have added';
+          $logthis = $session->mode == 'live' ? 'added' : 'would have added';
         }
         if (! isset($el->filenumber)) { self::oops403("missing filenumber in manifest for '{$el->name}'"); }
         if (! is_numeric($el->filenumber)) { self::oops403("filenumber in manifest is not a number for '{$el->name}'"); }
         $tmppath = sprintf('%s/%d', self::uploadpath(), $el->filenumber);
-        if ($session->live) {
+        if ($session->mode == 'live') {
           if (! @rename($tmppath, $path)) { self::oops("cannot move '{$el->name}' to '{$path}' "); }
           if (! @touch($path, $el->mtime)) { self::oops("cannot set modified time for '{$path}'"); }
         } else {
@@ -665,36 +661,6 @@ EOD;
     }
     $tmppath = sprintf('%s/%s', $backupdir, str_replace('/', '|', substr($relpath,1).$el->name));
     if (! @rename($path, $tmppath)) { self::oops("cannot backup '{$path}' to '{$tmppath}'"); }
-  }
-
-  static function updaterevision() {
-    /* Changes the revision number in the file identified by the client */
-    $session = self::getsession();
-    if (empty($_POST['name'])) { enmuster::oops403('missing name'); }
-    $name = self::httpdecrypt($_POST['name']);
-    $path = sprintf('%s%s', self::getprojectpath(), $name);
-    if (! file_exists($path)) { enmuster::oops("revision file '...{$name}' missing on server", 'revisions'); }
-    $contents = @file_get_contents($path);
-    if ($contents === FALSE) { enmuster::oops("cannot read revision file '...{$name}'", 'revisions'); }
-    if (! preg_match('/~revision~([^0-9]*)([0-9]+)/', $contents, $m)) {
-      enmuster::oops("cannot find ~revision~ in revision file '...{$name}'", 'revisions');
-    }
-    $revision = empty($m[2]) ? 1 : (int)($m[2]) + 1;
-    $time = filemtime($path);
-    if ($session->live) {
-      $logthis = 'revision updated';
-      if (! @file_put_contents($path, 
-                               preg_replace('/~revision~([^0-9]*)([0-9]+)/', "~revision~\${1}{$revision}",
-                                            $contents)))
-      {
-        self::oops("cannot rewrite revision file after updating it", 'revisions');
-      }
-      /* make sure we don't postdate from their version or we'll get into trouble */
-      if (! @touch($path, $time)) { self::oops("cannot set modified time for '{$path}'", 'revisions'); }
-    } else {
-      $logthis = 'would have updated revision';
-    }
-    return array('log'=>"{$logthis} to {$revision} in ...{$name}");
   }
 
   static function upgrade() {
@@ -726,7 +692,7 @@ EOD;
         continue;
       }
       $log .= "upgrading with '...{$upgrade}', says:\n";
-      if ($session->live) {
+      if ($session->mode == 'live') {
         /* SO THIS IS RATHER DANGEROUS IF NOT DONE PROPERLY: */
         $log .= shell_exec(sprintf('cd %s ; %s 2>&1', 
                                    escapeshellarg($dir), 

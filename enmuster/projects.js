@@ -78,7 +78,8 @@ var Project = {
 		var f = Object.create(Project);
 		f.name = o.name;
 		f.deploy = o.deploy;
-		f.testmode = o.testmode ? true : false;
+		f.testmode = !("testmode" in o) || o.testmode == "" ? "live" /* old settings */ : 
+			(o.testmode === true /* old setting */ ? "test" : o.testmode);
 		f.folders = o.folders.map(function(oo){ return Folder.Factory(oo); });
 		return f;
 	},
@@ -99,7 +100,7 @@ var Project = {
 		return 	{name: name,
 				 folders: [],
 				 deploy: true,
-				 testmode: true,
+				 testmode: "test",
 				};
 	},
 
@@ -108,7 +109,9 @@ var Project = {
 		var self = this;
 		self.helpers = helpers;
 		self.helpers.progress("<p class='cinfodeploying'>"+
-						 (self.testmode ? "TESTING DEPLOYMENT": "DEPLOYING")+" "+Util.h(self.name)+"</p>");
+			(self.testmode == "test" ? "TESTING DEPLOYMENT" :
+			 (self.testmode == "sync" ? "synchronising file times" : "DEPLOYING"))+
+							  " "+Util.h(self.name)+"</p>");
 		Nasync.eachSeries(this.folders, 
 						  function(folder, cbf){ folder.deployFolder(self, cbf) },
 						  cb);
@@ -124,7 +127,7 @@ var Project = {
 	removeFolder: function(i) { this.folders.splice(i, 1); },
 	addFolder: function(path) { this.folders.push(Folder.Factory(Folder.Proforma(path))); },
 
-	setTestMode: function(on) { this.testmode = on; }
+	setTestMode: function(mode) { this.testmode = mode; }
 }
 
 var Folder = {
@@ -162,7 +165,7 @@ var Folder = {
 		return {path: path,
 				urls: [],
 				exclusions: [],
-				excludepatterns: {patterns: "*.bak, *~, #*#, .svn, *.unused"},
+				excludepatterns: {patterns: "*.bak, *~, #*#, .svn, *.unused, .git*"},
 				upgrade: {pattern: "*.upgrade"},
 				deploy: true,
 				collapsed: false};	 
@@ -171,9 +174,35 @@ var Folder = {
 	deployFolder: function(project, cb){
 		var self = this;
 		if (! self.deploy) { return cb(null); }
-		Nasync.eachSeries(this.urls, 
-						  function(url, cbu){ url.deployToUrl(project, self, cbu); },
-						  cb);
+
+		self.updateRevision(project, function(err){
+			if (err) { return cb(err); }
+			Nasync.eachSeries(self.urls, 
+							  function(url, cbu){ url.deployToUrl(project, self, cbu); },
+							  cb);
+		});
+	},
+
+	updateRevision: function(project, cb) {
+		var self = this;
+		if (! self.revision) { return cb(null); }
+		var path = self.path + self.revision.name;
+		Nfs.readFile(path, "binary", function(err, data) {
+			if (err) { return cb(err); }
+			var rg = new RegExp(/(~revision~[^0-9]*)([0-9]+)/);
+			var m = data.match(rg);
+			if (! m) { cb("revision file does not contain '~revision~...n'"); }
+			var newrevision = parseInt(m[2])+1;
+			data = data.replace(rg, m[1]+newrevision);
+			if (project.testmode == "test") {
+				project.helpers.progress("<p>would have updated revision to "+newrevision+"</p>");
+				cb(null);
+			} else {
+				project.helpers.progress("<p>update revision to "+newrevision+"</p>");
+				Nfs.writeFile(path, data, 'utf8',function(err) { cb(err); });
+				/* that also updates the timestamp so it gets uploaded */
+			}
+		});
 	},
 
 	root: function(){ return this.path.replace(/\\/g, "/"); },
@@ -446,6 +475,80 @@ var Url = {
 		});
 	},
 
+	localsync: function(manifest, relpath, folder, cb){
+		var self = this;
+		Nfs.readdir(folder.path+relpath, function(err, entries) {
+			if (err && err.code == "ENOENT") { err = "your folder '"+folder.path+"' no longer exists"; }
+			if (err) { return cb(err); }
+			Nasync.each(entries, function(entry, cbeach){
+				var rel = relpath+"/"+entry;
+				var path = folder.path+rel;
+				if (folder.matchAnyExclusion(rel) || folder.excludepatterns.match(entry)) {
+					return cbeach(null);
+				}
+				Nfs.stat(path, function(err, stats){ 
+					if (err){ return cbeach(err); }
+					if (stats.isFile()) {
+						var mitem = manifest.get(entry);
+						if (mitem) {
+							if (! ("digest" in mitem)) {
+								if (self.digestok) {
+									self.helpers.progress("<p class='cinfoproblem'>"+
+														  Util.h("not proceeding with synchronisation because you need to update index.php on the server to support synchronisation - see settings")+"</p>");
+									self.digestok = false;
+								}
+								return cbeach("you need to update index.php on the server to support synchronisation - see settings");
+							}
+							if (! mitem.isFile()) {
+								return cbeach("local file is not a file on server: ..."+relpath+"/"+mitem.name);
+							}
+							if (mitem.size == stats.size) {
+								/* is the file *really* the same? if so we're going to set the local date */
+								Nfs.readFile(path, function(err, content) {
+									/* this can run in parallel without waiting */
+									if (Nmd5(content) == mitem.digest) {
+										var timeserver = ManifestItem.MtimeToUtime(mitem.mtime);
+										var timelocal = ManifestItem.MtimeToUtime(
+											ManifestItem.UtimeToMtime(stats.mtime.getTime()));
+										if (timeserver != timelocal) {
+											console.log("set time for "+path+": "+timeserver+" "+timelocal);
+											Nfs.utimes(path, stats.atime, new Date(timeserver), function(){});
+										}
+									} else {
+										self.helpers.progress("<p>"+Util.h("time for file '..."+relpath+"/"+mitem.name+"' not set because contents are different")+"</p>");
+									}
+								});
+							} else {
+								self.helpers.progress("<p>"+Util.h("time for file '..."+relpath+"/"+mitem.name+"' not set because they are different sizes")+"</p>");
+							}
+						} else {
+							self.helpers.progress("<p>"+Util.h("file '..."+relpath+"/"+entry+"' does not exist on server")+"</p>");
+						}
+						$("#impfilecount").text(++self.filecount);
+						return cbeach(null);
+					} else if (self.digestok && stats.isDirectory()) {
+						var mitem = manifest.get(entry);
+						if (mitem) {
+							if (! mitem.isDirectory()) {
+								return cbeach("local folder is not a directory on server: ..."+relpath+"/"+mitem.name);
+							}
+							self.localsync(mitem.folder, rel, folder, function(err){
+								$("#impfoldercount").text(++self.foldercount);
+								return cbeach(err);
+							});
+						} else {
+							self.helpers.progress("<p>"+Util.h("folder '..."+relpath+"/"+entry+"' does not exist on server")+"</p>");
+							return cbeach(null);
+						}
+					} else {
+						cbeach(null);
+					}});
+			},function(err){
+				cb(err);
+			});
+		});
+	},
+
 	comparemanifests: function(manifest, lmanifest, relpath, folder) {
 		var self = this;
 		lmanifest.each(function(litem){
@@ -470,7 +573,7 @@ var Url = {
 												 "<span class='cinfoproblem'>pre-dates</span>" + 
 												 Util.h(" the version on the server")+"</p>");
 							} else {
-								self.helpers.progress("<p>"+Util.h("your copy of file '..."+relpath+"/"+mitem.name+"' ")+"<span class='cinfoproblem'>pre-dates the version on the server</span>"+Util.h(" so it has been updated elsewhere. That means your version is out of date and you'll likely overwrite another change if you continue. Investigate the cause. If you're certain this is not a problem, the easiest way to fix it is to delete it from the server and let Enmuster restore it, though your site will be without a file for a short while")+"</p>");
+								self.helpers.progress("<p>"+Util.h("your copy of file '..."+relpath+"/"+mitem.name+"' ")+"<span class='cinfoproblem'>pre-dates the version on the server</span>"+Util.h(" so it has been updated separately on the server or from elsewhere. Your version is out of date and you'll likely overwrite another change if you continue. Investigate the cause. If you're certain this is not a problem, the easiest way to fix it is to delete it from the server and let Enmuster restore it, though your site will be without a file for a short while. Or you can synchronise the times if the files really haven't changed.")+"</p>");
 							}
 							self.postdateds++;
 						}
@@ -528,6 +631,7 @@ var Url = {
 			if (isdrop) { mitem.isdrop = isdrop; }
 		});
 	},
+
 
 	check: function(cb){
 		this.prepare();
@@ -604,6 +708,74 @@ var Url = {
 		return Util.decrypt(s, this.password);
 	},
 
+	syncFromUrl: function(helpers, project, folder, cb) {
+		var self = this;
+		self.helpers = helpers;
+		self.helpers.progress("<p class='cinfodeploying'>synchronising file times for '"+
+							  Util.h(project.name)+"' from '"+Util.h(self.url)+"'</p>");
+
+		this.prepare();
+
+		Nasync.times(self.tunnel ? 1 : 0, function(n, cbtunnel){
+			self.helpers.progress("<p>"+Util.h("opening tunnel to server")+"</p>");
+			self.tunnel.connect(self /* which gets modified */, cbtunnel);
+		},function(err, a){
+			if (err) { return cb(err); }
+			self.password = null;
+			self.auth = null;
+			self.helpers.progress("<p class='cinfofolder'>"+
+								  Util.h("folder "+folder.path+" to "+self.url)+"</p>");
+			Nasync.waterfall([
+				function init(cb) {
+					var data = {client: self.helpers.clientName, 
+								project: project.name, 
+								testmode: project.testmode};
+					if (self.target) { data.target = self.target; }
+					self.post("init", "initializing", data, function(err, encrypted) {
+						if (err) { return cb(err); }
+						// hex to binary...
+						var binary = '';
+						for(var i=0; i < encrypted.length-1; i+=2){
+							binary += String.fromCharCode(parseInt(encrypted.substr(i, 2), 16));
+						}
+						try {
+							session = JSON.parse(self.helpers.privateKey.decrypt(binary));
+						} catch (err) {
+							return cb("unable to get and decrypt a password from the server: you probably haven't installed your public key (see settings)");
+						}
+						self.password = session.password;
+						self.auth = {token: session.token, 
+									 auth: Util.encrypt(session.token, self.password)};
+						cb(null);
+					});
+				},
+
+				function getservermanifestwithdigests(cb) {
+					var data = {exclusions: self.encryptIfNecessary(folder.exclusionsJSON()), 
+								digest: true /* the key difference from deploy */};
+					$("#imp").remove();
+					self.digestok = true;
+					self.helpers.progress("<p id='imp'><span id='impwaitforserver'>scanning files on server</span></p>");
+					self.post("manifest", "fetching manifest", data, function(err, content) {
+						if (err) { return cb(err); }
+						content = self.decryptIfNecessary(content);
+						try { var jmanifest = JSON.parse(content); }
+						catch(err) { return cb(new Error("cannot parse manifest json")); }				
+						$("#impwaitforserver").remove();
+						self.localsync(Manifest.Factory(jmanifest), '', folder, cb);
+					});
+				}
+				/* end of Nasync.waterfall array */
+			], function(errwaterfall){			
+				/* Nasync.waterfall callback */
+				if (self.tunnel) { self.tunnel.disconnect(); }
+				self.helpers.progress("<p class='cinfocomplete'>completed</p>");
+			});
+			
+		});
+		return true;
+	},
+
 	deployToUrl: function(project, folder, cb) {
 		/* this is the big one, the one that does most of the work */
 		var self = this;
@@ -628,9 +800,11 @@ var Url = {
 
 			Nasync.waterfall([
 				function init(cb) {
-					var data = {client: self.helpers.clientName, project: project.name};
+					var data = {client: self.helpers.clientName, 
+								project: project.name, 
+								testmode: project.testmode == 'test' ? true : false};
+					if (project.testmode != 'test') { delete data.testmode; }
 					if (self.target) { data.target = self.target; }
-					if (project.testmode) { data.testmode = true; }
 					self.post("init", "initializing", data, function(err, encrypted) {
 						if (err) { return cb(err); }
 						// hex to binary...
@@ -676,7 +850,7 @@ var Url = {
 						$("#impwaitforserver").remove();
 					});
 					$("#imp").remove();
-					self.helpers.progress("<p id='imp'>looking for changes: scanned <span id='impfilecount'>0</span> files, <span id='impfoldercount'>0</span> folders<span id='impwaitforserver'>, waiting for server</p></p>");
+					self.helpers.progress("<p id='imp'>looking for changes: scanned <span id='impfilecount'>0</span> files, <span id='impfoldercount'>0</span> folders<span id='impwaitforserver'>, waiting for server</span></p>");
 					cb(null); /* note: this means it isn't wating for the server to complete, 
 								 we'll prepare the local manifest in in parallel */
 				},
@@ -785,17 +959,6 @@ var Url = {
 						if (err) { return cb(err); }
 						cb(null, JSON.parse(self.decryptIfNecessary(content)));
 					});
-				},
-
-				function revision(log, cb) {
-					if (! folder.revision || log.length == 0) { return cb(null, log); }
-					var data = {name: self.encryptIfNecessary(folder.revision.name)};
-					self.post("revision", "updating revision number", data,
-							  function(err, content) {
-								  if (err) { return cb(err+log.join('|')); }
-								  log.push(JSON.parse(self.decryptIfNecessary(content)).log);
-								  cb(null, log);
-							  });
 				},
 
 				function upgrade(log, cb) {
