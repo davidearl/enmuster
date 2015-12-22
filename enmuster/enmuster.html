@@ -28,7 +28,10 @@
 	  win.x = winpos.x; win.y = winpos.y; win.width = winpos.width; win.height = winpos.height;
 	  this.wintimer = null;
 	  this.winchange = function() {
-              this.wintimer = null;
+          this.wintimer = null;
+	      if (win.x < - (win.width-10) || win.y < - (win.height-10)) {
+			  return; /* off screen, or almost - probably minimised */
+		  }
 	      localStorage.winpos = 
 		  JSON.stringify({x: win.x, y: win.y, width: win.width, height: win.height});
 	  }	
