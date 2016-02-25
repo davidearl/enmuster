@@ -20,7 +20,8 @@
 	<a id='status'></a>
     <h1 style='vertical-align: top;'><img src='enmuster128.png'> Using Enmuster</h1>
 
-    <p>Enmuster is a cross-platform tool for deploying websites and web apps.</p>
+    <p>Enmuster is a cross-platform tool for deploying websites and
+    web apps.</p>
 
 	<p>Once set up, it's a one click action on the big orange button
 	<img src='go.png'> to deploy changes to a project. A change means
@@ -40,7 +41,17 @@
     working copy is managed in some kind of source control system like
     Subversion or Git and you have a second copy to which you check
     out for the production and/or test (staging) web site.</p>
-    
+
+   	<p>Updating can be done over HTTPS or HTTP (but still encrypting
+    the content), or <a href='#ssh'>over SSH</a>. It can also do any
+    of those indirectly through a SSH tunnel. With HTTP(S) it can
+    communicate with the server either as part of the site which is
+    being updated, or, better, a separate domain (e.g. a sub-domain of
+    the site being updated) hosted on the same server. So in the worst
+    case, if the only access to your server is a single domain on
+    http, you can still use Enmuster, but if you have shell or root
+    access to your server you have more options.</p>
+	
 	<h4>Contents</h4>
 	<p>
 	              <a href='#starting'>Getting Started</a>
@@ -49,6 +60,7 @@
 	  &bull;&nbsp;<a href='#folders'>Folders</a>
 	  &bull;&nbsp;<a href='#exclusions'>Exclusions</a>
 	  &bull;&nbsp;<a href='#urls'>Deploy via URLs</a>
+	  &bull;&nbsp;<a href='#live'>Live sites</a>
 	  &bull;&nbsp;<a href='#tunnels'>Via tunnel</a>
 	  &bull;&nbsp;<a href='#revisions'>Revision numbering</a>
 	  &bull;&nbsp;<a href='#maintenance'>Maintenance mode</a>
@@ -153,9 +165,12 @@
 	hash symbol)</p>
 
     <p>Each URL can be accessed directly, or via a 
-	<a href='#tunnels'>SSH tunnel</a>. Tunnels offer some additional
-    security possibilities and also make access possible to servers
-    behind gateway machines.</p>
+	<a href='#tunnels'>SSH tunnel</a>. Tunnels make access possible to
+    servers behind gateway machines.</p>
+
+	<p>URLs can also be marked as <a href='#live'>"live
+	sites"</a>. You have to turn deployment for live sites on each
+	time you want it to avoid accidental premature deployment.</p>
 
 	<h4 id='deployment'>Deployment</h4>
 
@@ -228,11 +243,13 @@
 	because it is assumed someone else has made changes, and therefore
 	you would lose those changes if you were to upload your own.</p>
 
-	<p>Your server needs to be able to accommodate the size of the
-	uploads. Most PHP uploads, for example, are limited to 2MB per
-	file, and this may not be enough. There are two settings to
-	change, either in your php.ini file or Apache .htaccess file if
-	your server configuration allows it. These are
+	<p>When updating over HTTP or HTTPS (rather
+	than <a href='#ssh'>SSH</a>), your server needs to be able to
+	accommodate the size of the uploads. Most PHP uploads, for
+	example, are limited to 2MB per file, and this may not be
+	enough. There are two settings to change, either in your php.ini
+	file or Apache .htaccess file if your server configuration allows
+	it. These are
 	<em class='ccode'>upload_max_filesize</em> (the limit for any one file) and
 	<em class='ccode'>post_max_size</em> (the limit for all the files in total, for
 	which the default is usually 8MB). You should be able to set the
@@ -249,14 +266,14 @@
 	this doesn't work. In that case you need to locate the lines in
 	your <em class='ccode'>php.ini</em> file on the server and update the values
 	there instead. If you can't do either, you need to complain to
-	your provider.</p>
+	your provider and/or use <a href='#ssh'>SSH</a> to do the upload instead.</p>
 
 	<h4 id='synchronisation'>Synchronisation</h4>
 
 	<p>When the synchronisation button (<img src='sync.png'>) for a
 	particular URL is pressed, local files in the relevant folder
 	which are the same as those on the server identified by the URL
-	have their time stamps set to those on the server. Files which
+	have earlier time stamps set to those on the server. Files which
 	are different, or missing on the server, will be identified but
 	not changed. "The same" means the files are the same size and have
 	the same content as determined by their md5 signatures.</p>
@@ -301,12 +318,16 @@
 
 	<h4 id='security-privacy'>Privacy</h4>
 
-	<p>Privacy is easily managed using HTTPS. However, it isn't
-	always practical to use HTTPS instead of HTTP. In this case, data
-	is encrypted explicitly by Enmuster for transfer.</p>
+	<p>Privacy is easily managed using HTTPS or SSH, both of which use
+	encryption by definition. However, it isn't always practical to
+	use HTTPS or SSH instead of HTTP. In this case, data is encrypted
+	explicitly by Enmuster for transfer.</p>
 
-	<p>If you use self-signed certificates, see note under <a
-	href='#selfsigned'>URLs</a>.</p>
+	<p>If you use self-signed certificates with HTTPS, see note
+	under <a href='#selfsigned'>URLs</a>. However, certificates are
+	now available free
+	from <a href='https://letsencrypt.org'>Let's&nbsp;Encrypt</a>, if
+	your server environment or provider allows you to install them.</p>
 
 	<a id='error-ssl'></a>
 	<h4 id='security-authentication'>Key pair authentication</h4>
@@ -338,6 +359,13 @@
 	on Windows. Keep it safe. It provides the same level of access to
 	your server as logging in or using (S)FTP etc.</p>
 
+	<p>Furthermore, if you upload over <a href='#ssh'>SSH</a> rather than HTTP(S), you
+	are logging in to your server using your own credentials. You
+	supply the username in the URL and either the password also, or,
+	better, rely on a SSH Agent
+	(<a href='http://www.chiark.greenend.org.uk/~sgtatham/putty/download.html'>Pageant</a>
+	on Windows).</p>
+	
 	<h4 id='security-executables'>Executable files</h4>
 
 	<p>While most files uploaded will simply replace or augment the
@@ -588,20 +616,39 @@
 	  href='#selfsigned'>self-signed certificate (q.v.)</a>,
 	  click <img src='certificategreen.png'>.</li>
 
+	  <li>To <strong>include</strong> or <strong>exclude</strong> the
+	  URL from deployment,
+	  click <img src='lgreen.png'>/<img src='lred.png'> to the left of
+	  the URL. Only those shown green will be included in a
+	  deployment.</li>
+	  
+	  <li>To indicate this is a <a href='#live'><strong>live site</strong></a>,
+	  press <img src='livegreen.png'>. The button turns orange <img src='liveorange.png'>: press again to turn off.</li>
+	  
 	  <li>See also <a href='#synchronisation'>synchronisation</a> <img src='sync.png'> of file times.</li>
 
 	</ul>
+
+	<p>The URL may contain some less familiar components. In its full
+	glory it may look something like this:</p>
+
+	<pre>    https://username:password@enmuster.example.com:1234/enmuster#live</pre>
 	
-	<p>The URL will definitely include the protocol, http or https. It
-	might include a port number after the domain name part, and, less
-	likely, username and password if it is set up to use <a class='cexlink'
+	<p>The URL will definitely include the
+	protocol, <strong>http</strong>, <strong>https</strong>
+	or <a href='#ssh'><strong>ssh</strong></a>. It might include a port number after the
+	domain name part, and, less likely, username and password if it is
+	set up to use ssh, <a class='cexlink'
 	href='http://httpd.apache.org/docs/2.2/howto/auth.html'>basic
 	auth</a> or <a class='cexlink'
 	href='http://httpd.apache.org/docs/2.2/howto/auth.html'>digest
-	auth</a>. It may also have a path part if it is not a site in its
-	own right. If <a href='#fragments'>deploying to
-	several instances of a site</a> on the same server, it will have a fragment, that is a
-	hash part.</p>
+	auth</a> (though basic or digest auth is not rerally needed as
+	authentication is managed by Enmuster's key-pair). It may also
+	have a path part if it is not a site in its own right (for ssh
+	this will be the location of the script relative to your home
+	directory). If <a href='#fragments'>deploying to several instances
+	of a site</a> on the same server, it will have a fragment, that is
+	a hash part.</p>
 
 	<p>When you add a URL, the site it refers to is checked, so it
 	must already have been set up. It also offers you a public key to
@@ -610,7 +657,7 @@
 	are using the same server for multiple deployments you only need
 	to do this once.</p>
 
-    <p>Each folder is deployed over HTTP or HTTPS to an Enmuster
+    <p>Each folder is deployed over HTTP, HTTPS or SSH to an Enmuster
     Server. The server is very simple: it's just one file, and you can
     download it by pressing the button for this on the Settings page
     (<img src='settings.png'>). Instructions for installation are in
@@ -621,45 +668,93 @@
 	Target Site if you must, and this is undoubtedly simpler (it
 	doesn't require setting up a new virtual server in Apache).</p>
 
-	<p>Ideally, the Enmuster Server should be an encrypted web site,
-	that is HTTPS. However, it can be HTML if you must, and the data
-	transferred will be independently encrypted.</p>
+	<p>When not using SSH, ideally the Enmuster Server should be an
+	encrypted web site, that is HTTPS. However, it can be HTML if you
+	must, and the data transferred will be independently
+	encrypted.</p>
 
-	<p>Ideally, you would put the Enmuster Server on its own port (it
+	<p>Ideally, you would put the Enmuster HTTP Server on its own port (it
 	should be private). This will avoid problems where HTTPS
 	connections cannot share virtual servers on the same
 	port. However, the client is up-to-date so <a class='cexlink'
 	href='http://en.wikipedia.org/wiki/Server_Name_Indication'>Server
 	Name Indication (SNI)</a> will also work. Of course, you cannot do
-	this if is run as part of your target site.</p>
+	this if it is run as part of your target site.</p>
 
-	<p>If you don't have HTTPS, you could also consider using a <a
-	href='#tunnels'>SSH tunnel</a> to the Enmuster Server and only
-	allowing HTTP access from the server machine itself (Apache's <a class='cexlink'
+	<p>If you can only use HTTP, you could also consider only allowing
+	access from a client machine you have access to
+	(Apache's <a class='cexlink'
 	href='http://httpd.apache.org/docs/2.2/howto/access.html'><em>Allow
 	from address</em> directive</a>, where <em>address</em> is
-	<em class='ccode'>localhost</em>. (If you use an IP address 127.0.0.1 to do
-	this, don't forget also the IPv6 equivalent ::1).</p>
+	<em class='ccode'>localhost</em>.</p>
 
+	<h4 id='ssh'>deployment over ssh</h4>
+
+	<p>If you don't have HTTPS but you can log in to your server
+	manually using ssh, you can set up Enmuster to do the same
+	automatically. As indicated above, use a URL like this:
+	  
+	  <pre>    ssh://Jerry@www.icecream.com/enmuster</pre>
+
+	<p>If your ssh server is running on a different port, include that in the
+	usual way. You can also include your login password here if you
+	must. So you might potentially have:</p>
+
+	  <pre>    ssh://Jerry:mypassword@www.icecream.com:1234/enmuster</pre>
+
+	<p>However, it is better (whether Enmuster or manual login)
+	to set up a key pair to do this, where the private key is itself
+	protected with a passphrase.</p>
+
+	<p>If you're on Windows, chances are you are logging in to your
+	server over ssh
+	using <a href='http://www.chiark.greenend.org.uk/~sgtatham/putty/download.html'>PuTTY</a>,
+	the de-facto ssh client. You generate keys using PuTTY's companion
+	program PuTTYGen, put the public key it gives you in
+	.ssh/authorized_keys on your server, and tell PuTTY to login using
+	its companion program, Pageant, to authenticate the key by ticking
+	the box "Attempt authentication using Pageant" in the Connections
+	- SSH - Auth panel in puTTY. Similarly on Unix (including Mac) ssh
+	can talk to
+	<a href='https://en.wikipedia.org/wiki/Ssh-agent'>ssh-agent</a>.</p>
+
+	<p>Enmuster does the same as puTTY: it talks to Pageant or
+	ssh-agent to obtain its authorization to log into the server using
+	the same Pageant/ssh-agent key-pair as for manual logins. So if
+	you can log in to your server manually using PuTTY or ssh in this
+	way, Enmuster can do so also, and it needs no further passwords.
+	Pageant is the default, identified by the word 'pageant' in the
+	authentication agent box in settings; if using ssh-agent, put the
+	path to the Unix socket that it provides in the box.</p>
+
+	<p>For ssh, the path part of the URL indicates where (relative to
+	your home directory) the PHP script to manage the updates is
+	located (the same script as for HTTP(S)). This can either be the
+	path of the script or the path of a directory in which index.php
+	is located. For SSH, as this directory is not exposed by the web
+	server, you can use the same directory as your Enmuster Data
+	Directory if you want.</p>
+	
 	<h4 id='selfsigned'>self signed certificates</h4>
 
-	<p>If you're using HTTPS for your an Enmuster Server, then your
-	certificate will normally be checked just like a browser would,
-	and this disallows a self-signed certificate because, in
-	principle, the identity of the server cannot be assured. However,
-	in this case, your identifty is checked on the server by your
-	public key, so a "man-in-the-middle" attack would not succeed and
-	a self-signed certificate is useful to encrypt the conversation
-	between server and client. (Once free, easily managed certificates
-	become availble through <a class='cexlink'
-	href='https://letsencrypt.org'>letsencrypt.org</a> there will no
-	longer be any good reason to use self-signed certificates.)</p>
+	<p>There is no longer any reason to use self-signed
+	certificates. <a href='https://letsencrypt.org'>Let's Encrypt</a>
+	now provides proper certificates free of charge.</p>
 
-	<p>To allow connection using a URL which has a self-signed certificate, press the
-	padlock button alongside the URL indicating a secure connection
+	<p>However, if you must use a self-signed certificate with HTTPS
+	for your an Enmuster Server, then your certificate will normally
+	be checked just like a browser would, and would reject it. You
+	need to allow connection using a URL which has a self-signed
+	certificate to override these checks. Press the padlock button
+	alongside the URL indicating a secure connection
 	(<img src='certificategreen.png'>) so that it shows yellow
-	instead: <img src='certificateyellow.png'> (click again to turn full security checks back on).</p>
-
+	instead: <img src='certificateyellow.png'> (click again to turn
+	full security checks back on).</p>.
+	
+	<p>In principle, the identity of the server cannot be assured with
+	a self-signed certificate. However, in this case, your identifty
+	is checked on the server by your public key, so a
+	"man-in-the-middle" attack would not succeed.</p>
 
 	<h4 id='fragments'>Using the same server to deploy to several instances of a site</h4>
 
@@ -700,55 +795,50 @@
 	  https://enmuster.icecream.com:3000/#chocolate
 	</pre>
 	
+	<h3 id='live'>Live sites</h3>
+
+	<p>Each URL can be marked as a "live site"
+	using <img src='livegreen.png'> alongside the URL. The button is
+	shown in orange <img src='liveorange.png'> for live sites. A live
+	site is one that is in public use (as opposed to a test or staging
+	version), one which you would not want to update by accident.</p>
+
+	<p>When a site is marked live, deployment is turned off for that
+	URL. To deploy you have to explicitly turn deployment on by
+	clicking <img src='lred.png'> to the left of the URL (it turns
+	green). When a deployment is completed successfully (i.e. not
+	counting trial deployments or those which end with errors),
+	deployment is turned off again automatically. Live sites are
+	updated more rarely than test or development sites, and this
+	feature guards against forgetting to turn off deployment
+	afterwards, which would lead to accidental updates next time you
+	intended just to update a staging site.</p>
+
+	<p>You can turn deployment on and off for all live sites at once
+	using the two buttons <img src='livesmallgreen.png'>
+	and <img src='livesmallred.png'> respectively, next to the project
+	name.</p>
+	
 	<h3 id='tunnels'>Via tunnel</h3>
 	
-	<p>Normally, your HTTP(s) connection is direct from your computer
-	to a specific port on the server (often 80 or 443, but may well be
-	different for Enmuster). A SSH tunnel creates a means whereby you
-	can access that nominated end point either from a third computer
-	or the server itself. To do this you must be able to log in to the
-	third computer using SSH. (Typically, you'd use <a class='cexlink'
-	href='http://www.chiark.greenend.org.uk/~sgtatham/putty/download.html'>Putty</a>
+	<p>Normally, your HTTP(s) or SSH connection specified by
+	the <a href='#urls'>URL</a> is direct from your computer to a
+	specific port on the server (often 80, 443 or 22 respectively, but
+	may well be different for Enmuster). A SSH tunnel provides the
+	means to access that nominated end point via an intermediate
+	computer, when the end point isn't accessible from the outside
+	world (it's behind a firewall for example). To do this you must be
+	able to log in to the intermediate computer using SSH. (Typically,
+	you'd use <a class='cexlink'
+	href='http://www.chiark.greenend.org.uk/~sgtatham/putty/download.html'>PuTTY</a>
 	to do this on Windows, or the ssh command on Linux).</p>
 
 	<p>Authentication for this login uses a username and either a
 	key-pair or a password. The private key stays on the client and
 	the public key on the server. (These are not the same keys that
-	Enmuster uses to authenticate itself to the Enmuster Server!).</p>
-
-	<p>A private key can itself optionally be protected with a
-	password. Usually, this password is delivered using an
-	<em>authentication agent</em> so you don't have to keep typing it
-	on every access. Indeed when Enmuster uses a key-pair for tunnel
-	authentication, it does not have the means to ask for a password
-	interactively. So either use a private key without a password, or
-	run Putty's agent <a class='cexlink'
-	href='http://www.chiark.greenend.org.uk/~sgtatham/putty/download.html'>Pageant</a>
-	to supply it.</p>
-
-	<p>I recommend not using existing keys for this, but generate a
-	pair for the purpose.  On the server do something like</p>
-	
-
-	<pre>       ssh-keygen -t rsa -C "Enmuster Jerry"</pre>
-
-	<p>This makes a 2048 bit key, which at the time of writing should
-	be secure enough. The string at the end is just a comment which
-	helps identify the key: I suggest you use your Enmuster client
-	name in it. Then copy the private key (over a secure connection)
-	and paste it to the space provided when adding a tunnel, and then
-	<em>delete the private key file from the server</em> - not doing
-	so is like leaving a physical key in the lock! Install the public
-	key by appending it to the file <em
-	class='ccode'>~/.ssh/authorized_keys</em>. You can use the same
-	public key for all the servers you want to deploy to using a
-	tunnel.</p>
-
-	<p>Alternatively you can generate a key-pair using Putty. This is
-	somewhat more secure as the private key never appears on the
-	server, even briefly. However, Putty uses its own format for the
-	keys, so you need to use its conversion method to get them in
-	openssh format, which both Enmuster and the server use.</p>
+	Enmuster uses to authenticate itself to the Enmuster
+	Server!). PuTTY and its companion programs PuTTYGen and Pageant
+	can manage keys for you - <a href='#ssh'>see above</a></p>
 
 	<p>A tunnel needs three things to work, in addition to the URL
 	(which includes both domain and port) which will eventually be
@@ -757,8 +847,8 @@
 
 	<ul>
 	  <li>The host name (a domain name, such as
-	  <em class='ccode'>ssh.icecream.com</em>, or IP address of the machine which is
-	  the far end of the tunnel.</li>
+	  <em class='ccode'>ssh.icecream.com</em>, or IP address of the
+	  intermediate machine at the far end of the tunnel.</li>
 
 	  <li>The port on that machine where the tunnel should
 	  connect. This is usually port 22, so you often don't need to
@@ -950,6 +1040,15 @@
 	<h3 id='bugs'>Known bugs and wish list</h3>
 
 	<ul>
+	  <li>It would be nice to be able to set the file permissions on
+	  newly installed files and folders on the server.</li>
+	  
+	  <li>It is not currently possible to have the Enmuster data
+	  Directory on a different partition from the final site with some
+	  versions of PHP as the PHP rename function doesn't work properly
+	  to move a whole directory from one partition to another when
+	  backing it up prior to deleting it from the target site.</li>
+	  
 	  <li>On Windows, at least, if you click in a window behind
 	  Enmuster's to bring it to the front, it leaves part of the
 	  Enmuster window around until the content of the other window

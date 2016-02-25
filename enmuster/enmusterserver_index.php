@@ -15,9 +15,11 @@ your own computer.
 INSTALLATION
 ------------
 
-Ideally, the Enmuster Server should run as its own web site, i.e. with
-its own URL; however, it can be in subfolder of the Target Site
-if you must, and this is undoubtedly simpler.
+Ideally, the Enmuster Server should run as its own web site, i.e. with its own
+URL; however, it can be in subfolder of the Target Site if you must, and this
+is undoubtedly simpler. Or if you are deploying via SSH, then this script
+needs to be in the folder realtive to your home directory given in the
+Enmuster deployment URL.
 
 Ideally, the Enmuster Server should be an encrypted web site, that is
 HTTPS; however, it can be HTML if you must, and the data transferred
@@ -30,9 +32,8 @@ port. However, the client is up-to-date so Server Name Indentity (SNI)
 will also work. Of course, you cannot do this if is run as part of the
 Target Site.
 
-If you don't have HTTPS, you could also consider using a SSH tunnel to
-the Enmuster Server and only allowing HTTP access from the server
-machine itself.
+If you don't have HTTPS, but you do have a SSH login, consider deploying over
+SSH instead.
 
 
 SECURITY
@@ -60,23 +61,26 @@ REQUIREMENTS
 
 * a Linux server (it uses the Linux shell)
 * ... with openssl installed (this secures the Enmuster Server)
-* ... running Apache or just possibly some other web server
+* ... running Apache or just possibly some other web server, or a SSH login.
 * ... with PHP version 5 or later.
 
 
 SETTING UP
 
-1. Create an Apache Virtual Host
+1a. For HTTP or HTTPS, create an Apache Virtual Host
 
 ... for the site if you can, with HTTPS if you can. This needs to run
 under the same user account as the Apache which serves the site it
 will update.
 
-2. Put this file into the public html directory for the Enmuster
-Server, or a subfolder within the Target Site if need be.
+1b. For SSH deployment create a directory, e.g. ~/enmuster
 
-3. Make sure the web server can write to the files which are to be
-updated in the Target Site.
+2. Put this file into the public html directory for the Enmuster Server, or a
+subfolder within the Target Site if need be, or for SHH intot he directory you
+created.
+
+3. Make sure the web server or your ssh account can write to the files which
+are to be updated in the Target Site.
 
 ...You might reasonably consider that bad practice, in which case
 consider using the maintenance mode facility to enable access just
@@ -159,7 +163,7 @@ class enmuster {
      POST data).
    */
   static function run() {
-    if (isset($_POST) && ((int)$_SERVER['CONTENT_LENGTH']) > self::postmaxsize()) { 
+    if (isset($_POST) && ! self::iscli() && ((int)$_SERVER['CONTENT_LENGTH']) > self::postmaxsize()) { 
       self::oops("maximum upload limit exceeded - you need to increase your post_max_size setting on the server");
     }
     if (empty($_POST['op'])) { self::oopsgoaway(); }
@@ -198,6 +202,8 @@ class enmuster {
     echo self::httpencrypt(json_encode(
       self::directory(self::getprojectpath(), self::getexclusions(), '', ! empty($_POST['digest'])
     )));
+    flush();
+    sleep(1);
   }
 
   static function do_upload() {
@@ -242,22 +248,69 @@ class enmuster {
   */
 
   static function oops($m, $helplink=NULL) { 
-    header("HTTP/1.0 400 Bad Request"); 
-    header('Content-type: text/plain'); 
-    echo $m;    
-    if (! empty($helplink)) { echo "#{$helplink}"; }
+    if (self::iscli()) {
+      file_put_contents('php://stderr', $m);
+      exit(400);
+    } else {
+      header("HTTP/1.0 400 Bad Request"); 
+      header('Content-type: text/plain'); 
+      echo $m;    
+      if (! empty($helplink)) { echo "#{$helplink}"; }
+    }
     exit;
   }
-  static function oops404() { header("HTTP/1.0 404 Page Not Found"); exit; }
+
+  static function oops404() {
+    if (self::iscli()) {
+      file_put_contents('php://stderr', 'Not Found');
+      exit(404);
+    } else {
+      header("HTTP/1.0 404 Page Not Found");
+    }
+    exit;
+  }
   static function oops409($m) { 
-    header("HTTP/1.0 409 Conflict"); 
-    header('Content-type: text/plain'); 
-    echo $m; 
+    if (self::iscli()) {
+      file_put_contents('php://stderr', $m);
+      exit(409);
+    } else {
+      header("HTTP/1.0 409 Conflict"); 
+      header('Content-type: text/plain'); 
+      echo $m; 
+    }
     exit;
   }
-  static function oops401($m) { error_log($m); header("HTTP/1.0 401 Not Authorized"); exit; }
-  static function oops403($m) { error_log($m); header("HTTP/1.0 403 Forbidden"); exit; }
-  static function oops500($m) { error_log($m); header("HTTP/1.0 500 Internal Server Error"); exit; }
+  static function oops401($m) {
+    if (self::iscli()) {
+      file_put_contents('php://stderr', $m);
+      exit(401);
+    } else {
+      error_log($m);
+      header("HTTP/1.0 401 Not Authorized");
+      exit; 
+    }
+  }
+  static function oops403($m) { 
+    if (self::iscli()) {
+      file_put_contents('php://stderr', $m);
+      exit(403);
+    } else {
+      error_log($m);
+      header("HTTP/1.0 403 Forbidden");
+      exit;
+    }
+  }
+  static function oops500($m) {
+    if (self::iscli()) {
+      file_put_contents('php://stderr', $m);
+      exit(500);
+    } else {
+      error_log($m);
+      header("HTTP/1.0 500 Internal Server Error");
+      exit;
+    }
+  }
+
   static function oopsgoaway() {
     /* if someone just accesses the URL without the relevant POST data, they just see this... */
     echo <<<EOD
@@ -435,7 +488,7 @@ EOD;
     return $names;
   }
 
-  static function insecure() { return empty($_SERVER['HTTPS']); }
+  static function insecure() { return ! self::iscli() && empty($_SERVER['HTTPS']); }
 
   static function httpencrypt($s) {
     /* there's a minor security flaw here in that the password is briefly exposed in commands like ps;
@@ -559,8 +612,14 @@ EOD;
     }
 
     $path = sprintf("%s/%d", self::uploadpath(TRUE), $filenumber);
-    if (! @move_uploaded_file($file['tmp_name'], $path)) { 
-      self::oops403("cannot copy uploaded file {$filenumber}");
+    if (! self::iscli()) {
+      if (! @move_uploaded_file($file['tmp_name'], $path)) { 
+        self::oops403("cannot copy uploaded file {$filenumber}");
+      }
+    } else {
+      if (! @rename($file['tmp_name'], $path)) { 
+        self::oops403("cannot copy uploaded file {$filenumber}");
+      }
     }
     self::httpdecryptfile($path);
     exit;
@@ -618,11 +677,13 @@ EOD;
         }           
         $log = array_merge($log, self::installfiles($el->folder, $projectpath, "{$relpath}{$el->name}/"));
       } else if (isset($el->size)) {
+        $perms = 0644;
         $replace = file_exists($path);
         if ($replace) { 
           if (! is_file($path)) { 
             self::oops("when trying to replace file {$path}, it is currently a directory"); 
           }
+	  $perms = fileperms($path);
           if ($session->mode == 'live') {
             $logthis = 'replaced';
             self::backupfileorfolder($path, $relpath, $el);
@@ -636,8 +697,9 @@ EOD;
         if (! is_numeric($el->filenumber)) { self::oops403("filenumber in manifest is not a number for '{$el->name}'"); }
         $tmppath = sprintf('%s/%d', self::uploadpath(), $el->filenumber);
         if ($session->mode == 'live') {
-          if (! @rename($tmppath, $path)) { self::oops("cannot move '{$el->name}' to '{$path}' "); }
-          if (! @touch($path, $el->mtime)) { self::oops("cannot set modified time for '{$path}'"); }
+	  if (! @rename($tmppath, $path)) { self::oops("cannot move '{$el->name}' to '{$path}' "); }
+	  if (! @touch($path, $el->mtime)) { self::oops("cannot set modified time for '{$path}'"); }
+	  if (! @chmod($path, $perms)) { self::oops("cannot set file permissions for '{$path}'"); }
         } else {
           if (! @unlink($tmppath)) { self::oops("cannot remove temporary uploaded file for '{$el->name}'"); }
         }
@@ -703,8 +765,48 @@ EOD;
     }
     return array('log'=>$log);
   }
+
+  static function iscli() { return php_sapi_name() == 'cli'; }
+
+  static function cli(){
+    /* if we're running from the command line, convert command line parameter into POST
+       variables. For op=update, the manifest parameter comes from stdin not the command line because
+       it can be a bit long otherwise. For upload, the file is coming from stdin so put that into a
+       temporary file and mimic $_FILES - in this case the filename comes from the 'relpath' POST 
+       parameter */
+    if (!self::iscli()) { return; }
+    parse_str(substr(fgets(STDIN), 0, -1), $_POST);
+    if (empty($_POST['op'])) { return; }
+    if ($_POST['op'] == 'upload') {
+      $tmpdir = ENMUSTER_DATA_DIRECTORY.'/clupload';
+      if (! is_dir($tmpdir)) { mkdir($tmpdir); }
+      $temppath = tempnam($tmpdir, 'encil_');
+      $e = 0;
+      $fd = fopen($temppath, 'w');
+      while (($buffer = fgets(STDIN, 8193 /* must be a multiple of 4 + 1 */)) !== FALSE) {
+	  if (substr($buffer, -1) == "\x04") {
+	      $buffer = substr($buffer,0,-1);
+	      if (strlen($buffer) > 0) { fwrite($fd, base64_decode($buffer)); }
+	      break;
+	  }
+	  fwrite($fd, base64_decode($buffer));
+      }
+      fclose($fd);
+      self::log(sprintf("received %d byte file\n", filesize($temppath)));
+      //if (! @copy('php://stdin', $temppath)) { $e = UPLOAD_ERR_CANT_WRITE; }
+      //else
+      if (empty($_POST['relpath'])) { $e = UPLOAD_ERR_EXTENSION; }
+      @chmod($temppath, 0644);
+      $_FILES[0] = array(
+        'error'=> $e,
+        'name' => empty($_POST['relpath']) ? '' : $_POST['relpath'],
+        'tmp_name' => $temppath
+      );
+    }
+  }
 }
 
+enmuster::cli();
 enmuster::run();
 exit; // mostly the functions exit anyway so this is really redundant
 

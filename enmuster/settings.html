@@ -30,12 +30,18 @@ h1 {
 		<strong><em><span class='cclientname'></span>.pem</em></strong> in each server's<!--'-->
 		enmuster data directory<span class='chelpme' enhash='security-authentication'></span>. 
 		This is what allows access to your server(s):</label><br>
-		<textarea id='isetpublickey' readonly></textarea><br>
+        <textarea id='isetpublickey' readonly></textarea><br>
 		<input type='button' id='isetsavekeybutton' value='Save public key to a file'>
 		<span id='isetsavekeyresult'></span>
 		<input type='file' id='isetsavekey' nwsaveas='' style='display: none;'><br>
 		<input type='button' id='isetmakekeypair' value='Make a new key pair'>
 		<span class='csettinghint'>(this will take a short while and require replacing keys on all servers)</span>
+	  </div>
+	  <div class='csetting'>
+		<label for='isetauthenticationagent'>Authentication agent</label><br/>        
+		<input type='text' id='isetauthenticationagent' value=''><br>
+		<span class='csettinghint'>'pageant' on Windows, or path to ssh-agent's Unix socket on Unix
+		  <span class='chelpme' enhash='ssh'></span></span>
 	  </div>
 	  <div class='csetting'>
 		<label for='isetlocalport'>Local port to use for tunnels</label><br/>        
@@ -75,6 +81,9 @@ h1 {
 	    });
 	    $("#isetlocalport").val(Tunnel.GetLocalPort()).on("change", function(){
             Tunnel.SaveLocalPort($(this).val());
+	    });
+	    $("#isetauthenticationagent").val(enmuster.getAuthenticationAgent()).on("change", function(){
+            enmuster.setAuthenticationAgent($(this).val());
 	    });
         $("#isetsavekeybutton").click(function(){
 	        // see https://github.com/nwjs/nw.js/wiki/File-dialogs

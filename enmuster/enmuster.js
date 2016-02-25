@@ -54,17 +54,33 @@ var enmuster = {
     deploy: function() {
 		/* in response to the big orange button, run the current project (i.e. deploy its files) */
 		this.showinfo(""); // so we can append to it
+		enmuster.busy();
 		try {
 			var cp = projects.currentProject();
 			cp.deployProject(
                 {clientName: this.getClient(), 
 				 error: this.showerror,
 				 progress: this.appendinfo,
+				 progressupdate: this.updateinfo,
 				 encrypt: this.encrypt, decrypt: this.decrypt,
 				 privateKey: this.getprivatekey()}, 
 				function(err){
-					if (err) { enmuster.showerror(err); }
-				});
+					enmuster.idle();
+					if (err) { enmuster.showerror(err); return; }
+					if (cp.testmode == "test" || cp.testmode == "sync") { return; }
+					var changed = 0;
+					cp.eachFolder(function(folder){
+						folder.eachUrl(function(url){
+							if (! url.live || ! url.deploy) { return; }
+							url.deploy = false;
+							changed++;
+						});
+					});
+					if (changed > 0) {
+						projects.save();
+						enmuster.drawproject(cp);		
+					}
+				});			
 		} catch(err) {
 			enmuster.showerror(err);
 		}
@@ -96,6 +112,7 @@ var enmuster = {
 			toggleClass("cprojectteston", project.testmode == "test").
 			attr("enhint", project.testmode == "test" ? "test project deployment" : "DEPLOY PROJECT!");
 		var jf = $("#ifolders").empty();
+		var livesiteson = 0; var livesitesoff = 0;
 		
 		project.eachFolder(function(folder){
 			var jfli = $("#pfolder li").clone();
@@ -120,16 +137,20 @@ var enmuster = {
 			var turnedoff = 0;
 			folder.eachUrl(function(url){
 				if (! url.deploy) { turnedoff++; }
+				if (url.live) {	url.deploy ? (livesiteson++) : (livesitesoff++); }
 				var jurl = $("#purl li").clone();
 				if (url.url == "") {
 					jurl.find(".curlnameplain").hide();
 					jurl.find(".cformurlname").show();
 				} else {
-					jurl.find(".curlnameplain").show().text(url.url);
+					jurl.find(".curlnameplain").show().
+						text(url.url.replace(/:[^@\/]+@/, ':\u2022\u2022\u2022\u2022\u2022\u2022@')).
+						attr("url", url.url);
 				}
 				
-				jurl.find(".cselfsignedbutton").toggle(! url.insecure()).
+				jurl.find(".cselfsignedbutton").toggle(url.protocol() == "https").
 					toggleClass("cselfsignedok", ! url.strictSSL);
+				jurl.find(".curllivebutton").toggleClass("curlislive", url.live ? true : false);
 
 				if (! url.tunnel) {
 					$(jurl).find(".ctunneladdbutton").show();
@@ -190,6 +211,8 @@ var enmuster = {
 			jfli.appendTo(jf);
 		}); // end eachFolder
 		this.drawdeployments(project);
+		$(".cprojectliveon").toggle(livesitesoff > 0);
+		$(".cprojectliveoff").toggle(livesiteson > 0);
     },
 
     states: {all: "lgreen.png", some: "lyellow.png", none: "lred.png", na: "lgrey.png"},
@@ -391,7 +414,7 @@ var enmuster = {
     editurl: function(jurl) {
 		var jn = jurl.find(".curlname");
 		jn.find(".cformurlname, .curlnameplain").toggle();
-		jn.find(".cinputurlname").val(jn.find(".curlnameplain").text()).focus().select();
+		jn.find(".cinputurlname").val(jn.find(".curlnameplain").attr("url")).focus().select();
     },
     changeurl: function(jurl) {
 		//var iproj = this.cp();
@@ -428,10 +451,14 @@ var enmuster = {
 		
 		this.showinfo("copy the following public key onto the server", "<p>&bull; this is used to demonstrate you are permitted to access this location and is used to encrypt when no https or ssh channel is available</p><p>&bull; you can also collect, revoke and regenerate the key pair from settings</p><p>&bull; keep the private key stored with this app safe &ndash; it gives the same level of access to your server as other ways of accessing and executing files on it!</p><p id='iinfokeywait' style='color: tomato; text-align: center;'>making key<br>please wait<br>this may take a short while</p><p id='iinfopublickey'></p>");
 		setTimeout(function(){
-			$("#iinfokeywait").remove();
-			$("#iinfopublickey").html("<textarea>"+enmuster.getpem()+"</textarea>");
-			$("#iinfopublickey textarea").css({width: "90%", height: "160px", fontSize: "10px"}).
-				select().focus();
+			enmuster.updateinfo("#iinfokeywait", function(j){j.remove(); });
+			enmuster.updateinfo("#iinfopublickey", function(j){
+				j.html("<textarea>"+enmuster.getpem()+"</textarea>");
+			});
+			enmuster.updateinfo("#iinfopublickey textarea", function(j){
+				j.css({width: "90%", height: "160px", fontSize: "10px"}).
+					select().focus();
+			});
 		}, 500);
     },
 
@@ -475,22 +502,51 @@ var enmuster = {
 		projects.save();
 		this.redraw();
     },
+
+	liveurl: function(jurl, jbutton){
+		var url = projects.getUrlOfCurrent(jurl.closest(".cfolder").index(), jurl.index());
+		url.live = url.live ? false : true; // not ! because it may not be set
+		if (url.live) {	url.deploy = false; }
+		projects.save();
+		this.drawproject(projects.currentProject());		
+	},
+
+	setprojectlive: function(on) {
+		var cp = projects.currentProject();
+		var changed = 0;
+		cp.eachFolder(function(folder){
+			folder.eachUrl(function(url){
+				if (! url.live) { return; }
+				if (url.deploy === on) { return; }
+				url.deploy = on;
+				changed++;
+			});
+		});
+		if (changed > 0) {
+			projects.save();
+			enmuster.drawproject(cp);		
+		}		
+	},
+	
 	syncurl: function(jurl) {
 		var project = projects.currentProject();
 		var ifolder = jurl.closest(".cfolder").index();		
 		var folder = projects.getFolderOfCurrent(ifolder);
 		var url = projects.getUrlOfCurrent(ifolder, jurl.index());
 		
-		this.showinfo(""); // so we can append to it
+		enmuster.busy();
+		enmuster.showinfo(""); // so we can append to it
 		try {
 			url.syncFromUrl( 
                 {clientName: this.getClient(), 
 				 error: this.showerror,
 				 progress: this.appendinfo,
+				 progressupdate: this.updateinfo,
 				 encrypt: this.encrypt, decrypt: this.decrypt,
 				 privateKey: this.getprivatekey()}, 
 				project, folder,
 				function(err){
+					enmuster.idle();
 					if (err) { enmuster.showerror(err); }
 				});
 		} catch(err) {
@@ -507,6 +563,17 @@ var enmuster = {
 		return localStorage.clientname;
     },
     saveClient: function(clientname) { localStorage.clientname = clientname; },
+	
+    getAuthenticationAgent: function() {
+		/* make an authenticationagent if we don't have one already */
+		if (! localStorage.authenticationagent) {
+			localStorage.authenticationagent = "pageant";
+		}
+		return localStorage.authenticationagent;
+    },
+    saveAuthenticationAgent: function(clientname) {
+		localStorage.authenticationagent = authenticationagent;
+	},
 	
 
     droprevision: function(path, stats, jfolder) {
@@ -637,7 +704,7 @@ var enmuster = {
 
 
     showerror: function(err /* error object or message */) {
-		// $("#iinfo").hide();
+		enmuster.idle();
 		var text = err.message ? err.message : err;
 		/* if there's a hash-something in the message, link to help */
 		var r = /#([a-z0-9\-])+/;
@@ -651,17 +718,64 @@ var enmuster = {
 		$("#ierrorclosebutton").one("click", function() { $("#ierror").hide(250); });
 		$("#ierror").show(250);
     },
+	updateinfowindow: function(){
+		if (enmuster.infoupdatetimer) { clearTimeout(enmuster.infoupdatetimer);	}
+		enmuster.infoupdatetimer = setTimeout(function(){
+			$(enmuster.infowindow.window.document).contents().find("#iinfo").html($("#iinfo").html());
+			enmuster.infoupdatetimer = null;
+		}, 500);
+	},
     showinfo: function(err /* error object or message */, h /* some html to follow if set */) {
+		enmuster.info();
 		$("#iinfomessage").text(err.message ? err.message : err);
 		h ? $("#iinfohtml").html(h) : $("#iinfohtml").empty();
-		$("#iinfoclosebutton").one("click", function() { $("#iinfo").hide(250); });
-		$("#iinfo").show(250);
+		enmuster.updateinfowindow();
     },
+	updateinfo: function(selector, cb) {
+		cb($(selector));
+		enmuster.updateinfowindow();
+	},
     appendinfo: function(h) {
 		$(h).appendTo("#iinfohtml");
+		enmuster.updateinfowindow();
+    },
+    infochange: function() {
+		enmuster.infotimer = null;
+		localStorage.infopos = 
+			JSON.stringify({x: enmuster.infowindow.x, y: enmuster.infowindow.y, 
+							width: enmuster.infowindow.width, 
+							height: enmuster.infowindow.height});
+    },
+    setinfotimer: function() {
+		if (enmuster.infotimer) { clearTimeout(enmuster.infotimer); }
+		enmuster.infotimer = setTimeout(enmuster.infochange, 100);
     },
 
+    info: function() {   
+		if (enmuster.infowindow) { 
+			enmuster.infowindow.show();
+			enmuster.infowindow.focus();
+			$(enmuster.infowindow.window.document).contents().find("#iinfo").empty();
+		} else {
+			var infopos = localStorage.infopos ? JSON.parse(localStorage.infopos) : 
+				{width: 600, height: 800, x: win.x+40, y: win.y+40};
+			infopos.title = "Enmuster Info";
+			infopos.icon = "enmuster48i.png";
+			infopos.toolbar = enmuster.dodebug;
+			url = 'info.html';
+			enmuster.infowindow = Ngui.Window.open(url, infopos);
+			enmuster.infowindow.on("close", function(){ 
+				enmuster.infowindow = null; this.close(true); });
+			enmuster.infowindow.on("resize", function(){ enmuster.setinfotimer(); });
+			enmuster.infowindow.on("move", function(){ enmuster.setinfotimer(); });
+			enmuster.infowindow.on("loaded", function() { 
+				enmuster.infowindow.window.parentenmuster(enmuster);
+				enmuster.infowindow.loaded = true;
+			});
+		}
+    },
 
+	
     showsettings: function() {
 		$("#isettingsclosebutton").one("click", function() { $("#isettings").hide(250); });
 		$("#isettings").show(250);
@@ -677,6 +791,17 @@ var enmuster = {
 		}
 		return localStorage.publicpem;
     },
+	getprivatessh: function(){
+		return Nforge.ssh.privateKeyToOpenSSH(enmuster.getprivatekey(), "");
+	},
+	getauthorizedkeys: function() {
+		var pem = enmuster.getpem();
+		return "ssh-rsa "+
+			(pem.replace("-----BEGIN PUBLIC KEY-----", "").
+			 replace("-----END PUBLIC KEY-----", "").
+  			  replace(/\n/g, ""))+
+			" enmuster "+enmuster.getClient();
+	},
     getprivatekey: function() { 
 		var pki = Nforge.pki;    
 		if (! localStorage.publicpem) { this.getpem(); }
@@ -698,6 +823,7 @@ var enmuster = {
     help: function(anchor) {   
 		if (enmuster.helpwindow) { 
 			enmuster.helpwindow.show();
+			enmuster.helpwindow.focus();
 			if (anchor) { enmuster.helpwindow.window.location.hash = anchor; }
 		} else {
 			var helppos = localStorage.helppos ? JSON.parse(localStorage.helppos) : 
@@ -729,10 +855,11 @@ var enmuster = {
     settings: function() {   
 		if (enmuster.settingswindow) { 
 			enmuster.settingswindow.show();
+			enmuster.settingswindow.focus();
 		} else {
 			var settingspos = localStorage.settingspos ? JSON.parse(localStorage.settingspos) : 
-				{width: 600, height: 600, x: win.x+40, y: win.y+40};
-			settingspos.title = "Using Enmuster";
+				{width: 600, height: 800, x: win.x+40, y: win.y+40};
+			settingspos.title = "Enmuster Settings";
 			settingspos.icon = "enmuster48s.png";
 			settingspos.toolbar = enmuster.dodebug;
 			url = 'settings.html';
@@ -766,6 +893,21 @@ var enmuster = {
 		win.showDevTools();
 	},
 
+	idle: function() {
+		if (enmuster.busytimer) {
+			clearTimeout(enmuster.busytimer);
+			enmuster.busytimer = null;
+		}
+		$("#ispinner").hide();
+	},
+	busy: function(){
+		if (enmuster.busytimer) { return; }
+		enmuster.busytimer = setTimeout(function(){
+			$("#ispinner").show();
+			enmuster.busytimer = null;
+		}, 500);
+	},
+	
 	checkforupdates: function() {
 		if (localStorage.nextversioncheck &&
 			Date.now() < parseInt(localStorage.nextversioncheck)) { return; }
@@ -788,6 +930,10 @@ var enmuster = {
 		enmuster.dodebug = Ngui.App.manifest.debug ? true : false;
 		Util.init();
 
+		$("#ispinner").click(function(e){
+			e.preventDefault(); e.stopPropagation();
+		});
+		
 		$("#iprojects").
 			on("click", ".cprojectname", function(e){ 
 				enmuster.selectproject($(this).closest(".cproject").prop("project"));
@@ -802,7 +948,9 @@ var enmuster = {
 				enmuster.canceldeleteproject($(this).closest(".cproject"));
 			});
 		
-		$("#inewprojectbutton").click(function(){ enmuster.newproject(); });
+		$("#inewprojectbutton").click(function(){
+			enmuster.newproject();
+		});
 		
 		$(".cprojectnameplain").click(function(e){
 			enmuster.editprojectname();
@@ -813,12 +961,16 @@ var enmuster = {
 			enmuster.changeprojectname();
 		});
 		
-		$("#igo").click(function(e){ enmuster.deploy(); });
+		$("#igo").click(function(e){
+			enmuster.deploy();
+		});
 		$("#ihelp").click(function(e){ enmuster.help(); });
 		$("#isettings").click(function(e){ 
 			e.ctrlKey ? enmuster.setdebug() : enmuster.settings(); 
 		});
-		$("#iprojectshare").change(function(e){ enmuster.saveprojecttodisk($(this)); });
+		$("#iprojectshare").change(function(e){
+			enmuster.saveprojecttodisk($(this));
+		});
 		
 		$("body").
 			on("click", ".chelpme", function(e){
@@ -842,6 +994,9 @@ var enmuster = {
 			}).
 			on("click", ".cprojecttest", function(e){
 				enmuster.testproject($(this));
+			}).
+			on("click", ".cprojectlive", function(e){
+				enmuster.setprojectlive($(this).hasClass("cprojectliveon"));
 			}).
 			on("click", ".cfolderstate", function(e){
 				enmuster.togglefolderstate($(this));
@@ -885,6 +1040,9 @@ var enmuster = {
 			}).
 			on("click", ".curldeletebutton", function(e){
 				enmuster.deleteurl($(this).closest(".curl"));
+			}).
+			on("click", ".curllivebutton", function(e){
+				enmuster.liveurl($(this).closest(".curl"), $(this));
 			}).
 			on("click", ".curlsyncbutton", function(e){
 				enmuster.syncurl($(this).closest(".curl"));
@@ -969,6 +1127,7 @@ var enmuster = {
 					 $(this).removeClass("cdropover");
 				 },
 				 drop: function (e) {
+					 enmuster.busy();
 					 var jel = $(this);
 					 jel.removeClass("cdropover");
 					 e.preventDefault();
@@ -992,6 +1151,7 @@ var enmuster = {
 									for (var i=0; i < files.length; i++) {
 										fn(jel, files[i].path, astats[i]);
 									}
+									enmuster.idle();
 								});
 				 }},
 				targets);
@@ -1054,7 +1214,6 @@ var enmuster = {
 		
 		
 		$("#ierrorbackground").click(function(e){ e.stopPropagation(); });
-		$("#iinfobackground").click(function(e){ e.stopPropagation(); });
 		
 		this.redraw();
     }

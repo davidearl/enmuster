@@ -309,7 +309,7 @@ var Patterns = {
 
 var Tunnel = {
 	Factory: function(o) {
-		/* o: {login: username, host: "domainname[:port], key: "privatekey"|"password"} */
+		/* o: {login: username, host: "domainname[:port], key: "password"} */
 		var f = Object.create(Tunnel); 
 		f.login = o.login;
 		f.host = o.host;
@@ -321,7 +321,7 @@ var Tunnel = {
 
 	Proforma: function(){ return {login: "", host: "", key: ""}; },
 
-	detailsGiven: function() { return this.login != "" && this.host != "" && this.key != ""; },
+	detailsGiven: function() { return this.login != "" && this.host != ""; },
 
 	connect: function(targeturl, cb) {
 		/* connects to a ssh tunnel to the specified server:port through which the website url(s) are
@@ -334,8 +334,9 @@ var Tunnel = {
 		var host = this.getHost();
 		var config = {username: this.login, host: host.host, port: host.port, keepaliveInterval: 60000}; 
    
-		if (this.key.indexOf("-----BEGIN") == 0) {
+		if (this.key == "") {
 			config.agent = "pageant"; // for automatic pass phrase resolution
+		} else if (this.key.indexOf("-----BEGIN") == 0) {
 			config.privateKey = this.key;
 		} else {
 			config.password = this.key;
@@ -399,6 +400,7 @@ var Url = {
 		var f = Object.create(Url);
 		f.url = o.url;
 		f.deploy = ("deploy" in o) ? o.deploy : true;
+		f.live = ("live" in o) ? o.live : false;
 		f.strictSSL = ("strictSSL" in o) ? o.strictSSL : true;
 		if ("tunnel" in o) { f.tunnel = Tunnel.Factory(o.tunnel); }
 		return f;
@@ -406,6 +408,7 @@ var Url = {
 	
 	bald: function(){
 		var o = {url: this.url, deploy: this.deploy, strictSSL: this.strictSSL};
+		o.live = this.live ? true : false;
 		if (this.tunnel) { o.tunnel = this.tunnel.bald(); }
 		return o;
 	},
@@ -417,18 +420,23 @@ var Url = {
 	setTunnel: function(o) { this.tunnel = Tunnel.Factory(o ? o : Tunnel.Proforma()); },
 	removeTunnel: function() { if ("tunnel" in this) { delete this.tunnel; } },
 
-	parts: function() {
+	parts: function(url) {
 		/* thank you https://gist.github.com/jlong/2428561 */
-		var a = $("<a>").attr("href", this.url).get(0);
+		var a = $("<a>").attr("href", url ? url : this.url).get(0);
+		var p = a.protocol;
+		if (p == 'ssh:') { a.protocol = 'http:'; /* so it parses: ssh doesn't */ }
 		if (a.port == "") { a.port = a.protocol == "http:" ? 80 : 443; }
 		return {
-			protocol: a.protocol, // includes trailing : but not //, e.g. "http:"
+			protocol: p, // includes trailing : but not //, e.g. "http:"
 			hostname: a.hostname, // e.g. "www.example.com"
-			port: a.port == "" ? (a.protocol == "http:" ? 80 : 443) : parseInt(a.port), // ensures always set
+			port: a.port == "" ? (p == "ssh:" ? 22 : (p == "http:" ? 80 : 443)) : parseInt(a.port),
+			  // ensures always set
 			pathname: a.pathname, // includes leading /, e.g. "/index.html"
 			search: a.search, // includes ?, e.g. "?foo=bar"
 			hash: a.hash, // includes the hash, e.g. "#top"
-			host: a.host // concatentaion of host[:port], e.g. "www.example.com" or "www.example.com:8080"
+			host: a.host, // concatentaion of host[:port], e.g. "www.example.com" or "www.example.com:8080"
+			username: a.username, // the bit before the @ in http://wibble@example.com...
+			password: a.password // ... with a password if given as in http://user:password@example.com...
 		};
 	},
 
@@ -452,7 +460,8 @@ var Url = {
 							size: stats.size,
 							mtime: ManifestItem.UtimeToMtime(stats.mtime),
 						}));
-						$("#impfilecount").text(++self.filecount);
+						self.helpers.progressupdate("#impfilecount",
+													function(j){ j.text(++self.filecount); });
 						return cbeach(null);
 					} else if (stats.isDirectory()) {
 						var fmanifest = ManifestFolder.Factory({
@@ -463,7 +472,8 @@ var Url = {
 						});
 						self.localmanifest(fmanifest.folder, rel, folder, function(err){
 							lmanifest.add(fmanifest);
-							$("#impfoldercount").text(++self.foldercount);
+							self.helpers.progressupdate("#impfoldercount",
+														function(j){ j.text(++self.foldercount); });
 							return cbeach(null);
 						});
 					} else {
@@ -480,7 +490,7 @@ var Url = {
 		Nfs.readdir(folder.path+relpath, function(err, entries) {
 			if (err && err.code == "ENOENT") { err = "your folder '"+folder.path+"' no longer exists"; }
 			if (err) { return cb(err); }
-			Nasync.each(entries, function(entry, cbeach){
+			Nasync.eachSeries(entries, function(entry, cbeach){
 				var rel = relpath+"/"+entry;
 				var path = folder.path+rel;
 				if (folder.matchAnyExclusion(rel) || folder.excludepatterns.match(entry)) {
@@ -489,6 +499,8 @@ var Url = {
 				Nfs.stat(path, function(err, stats){ 
 					if (err){ return cbeach(err); }
 					if (stats.isFile()) {
+						self.helpers.progressupdate("#impfilecount",
+													function(j) {j.text(++self.filecount); });
 						var mitem = manifest.get(entry);
 						if (mitem) {
 							if (! ("digest" in mitem)) {
@@ -506,26 +518,27 @@ var Url = {
 								/* is the file *really* the same? if so we're going to set the local date */
 								Nfs.readFile(path, function(err, content) {
 									/* this can run in parallel without waiting */
+									if (err) { return cbeach(err); }
 									if (Nmd5(content) == mitem.digest) {
 										var timeserver = ManifestItem.MtimeToUtime(mitem.mtime);
 										var timelocal = ManifestItem.MtimeToUtime(
 											ManifestItem.UtimeToMtime(stats.mtime.getTime()));
-										if (timeserver != timelocal) {
-											console.log("set time for "+path+": "+timeserver+" "+timelocal);
+										if (timeserver > timelocal) {
 											Nfs.utimes(path, stats.atime, new Date(timeserver), function(){});
 										}
 									} else {
 										self.helpers.progress("<p>"+Util.h("time for file '..."+relpath+"/"+mitem.name+"' not set because contents are different")+"</p>");
 									}
+									return cbeach(null);
 								});
 							} else {
 								self.helpers.progress("<p>"+Util.h("time for file '..."+relpath+"/"+mitem.name+"' not set because they are different sizes")+"</p>");
+								return cbeach(null);
 							}
 						} else {
 							self.helpers.progress("<p>"+Util.h("file '..."+relpath+"/"+entry+"' does not exist on server")+"</p>");
+							return cbeach(null);
 						}
-						$("#impfilecount").text(++self.filecount);
-						return cbeach(null);
 					} else if (self.digestok && stats.isDirectory()) {
 						var mitem = manifest.get(entry);
 						if (mitem) {
@@ -533,7 +546,8 @@ var Url = {
 								return cbeach("local folder is not a directory on server: ..."+relpath+"/"+mitem.name);
 							}
 							self.localsync(mitem.folder, rel, folder, function(err){
-								$("#impfoldercount").text(++self.foldercount);
+								self.helpers.progressupdate("#impfoldercount",
+															function(j){ j.text(++self.foldercount); });
 								return cbeach(err);
 							});
 						} else {
@@ -549,8 +563,9 @@ var Url = {
 		});
 	},
 
-	comparemanifests: function(manifest, lmanifest, relpath, folder) {
+	comparemanifests: function(manifest, lmanifest, relpath, folder, cb) {
 		var self = this;
+		var good = true;
 		lmanifest.each(function(litem){
 			if (litem.isFile()) {
 				/* is it in manifest, and if so has it changed? */
@@ -561,6 +576,7 @@ var Url = {
 						return cb("changed from directory(?) to file: ..."+relpath+"/"+mitem.name);
 					}
 					if (! mitem.isWritable()) {
+						good = false;
 						return cb("file not writable on server: ..."+relpath+"/"+mitem.name);
 					}
 					if (mitem.size == litem.size && mitem.mtime == litem.mtime) {
@@ -603,11 +619,17 @@ var Url = {
 				if (! isnew) {
 					if (! mitem.isDirectory()) {
 						// uh oh, it was a file (or other object), now it's a directory
+						good = false;
 						return cb("changed from file(?) to directory: ..."+relpath+"/"+mitem.name);
 					}
 					/* compare the contents (note: none of this is asynchronous, so this will 
 					   just return when done */
-					self.comparemanifests(mitem.folder, litem.folder, relpath+"/"+mitem.name, folder);
+					if (! self.comparemanifests(mitem.folder, litem.folder, relpath+"/"+mitem.name,
+												folder, cb))
+					{
+						good = false;
+						return false;
+					}
 				} else {
 					/* it wasn't in the manifest, so add it */
 					litem.isnew = true;
@@ -630,6 +652,8 @@ var Url = {
 			});
 			if (isdrop) { mitem.isdrop = isdrop; }
 		});
+
+		return good;
 	},
 
 
@@ -652,11 +676,12 @@ var Url = {
 			this.posturl = this.posturl.substring(0, this.posturl.indexOf("#"));
 		}
 		if (this.posturl.substring(this.posturl.length-1) != "/") { this.posturl += "/"; }
+		this.post = p.protocol == "ssh:" ? this.sshpost : this.httppost;
 	},
 
 	updatePostUrl: function(newurl){ this.posturl = newurl; /* substitution for tunnel */},
 
-	post: function(op, opreadable, params, cb){	
+	httppost: function(op, opreadable, params, cb){	
 		var self = this;
 		var data = {op: op};
 		var form = "form";
@@ -696,7 +721,87 @@ var Url = {
 				 });
 	},
 	
-	insecure: function(){ return this.url.substring(0, 6) != "https:"; },
+	sshpost: function(op, opreadable, params, cb){
+		/* a replacement for post above when sending direct to a php script over ssh */
+		var self = this;
+		/* encode post parameters to go on command line; manifest goes on stdin */
+		var data = [];
+		data.push("op="+encodeURIComponent(op));
+		var piped = null;
+		for (var key in params) { 
+			if (key == "formData") {
+				continue;
+			} else if (key == "0") {
+				piped = params[key]; // the stream to pipe
+				continue;
+			}
+			data.push(key+"="+encodeURIComponent(params[key]));
+		}
+		if (this.auth) {
+			data.push("token="+encodeURIComponent(this.auth.token));
+			data.push("auth="+encodeURIComponent(this.auth.auth));
+		}
+		data = data.join("&");
+		
+		var Client = Nssh2.Client;
+		var host = this.parts();
+		var localhost = this.parts(this.posturl);
+		var config = {username: host.username, host: localhost.hostname, port: localhost.port,
+					  keepaliveInterval: 60000}; 
+
+		if (host.password == "") {
+			config.agent = "pageant"; // for automatic pass phrase resolution
+			//config.privateKey = enmuster.getprivatessh();
+		} else {
+			config.password = host.password;
+			config.tryKeyboard = true;
+		}
+
+		try {
+			var content = "";
+			var script = host.pathname.substr(1);
+			if (script.substr(-4) != ".php") {
+				script += script.substr(-1) == "/" ? "index.php" : "/index.php";
+			}
+			var cmd = "php5 '"+script+"'";
+
+			(function(execf){
+				if (self.ssh) { return execf(); }
+				self.ssh = new (Nssh2.Client)();		
+				self.ssh.on('keyboard-interactive', function(name, ins, insLang, prompts, finish){
+					finish([config.password]);
+				})
+				.on('ready', function() { execf(); });
+				self.ssh.connect(config);
+			})(function(){	
+				//console.log('Client ready');
+				self.ssh.exec(cmd, {}, function(err, stream) {
+					if (err) { throw err; }
+					stream
+						.on("close", function(code, signal){
+							if (code == 0) { return cb(null, content); }
+							cb(content, null);
+						})
+						.on("data", function(data){
+							content += data.toString('utf8');
+						})
+						.stderr.on("data", function(data){
+							content += data.toString('utf8'); // it'll barf on the json decode later
+						});
+					stream.write(data+"\x0A", 'utf-8', function(){
+						if (piped) { piped.pipe(Nbase64.encode()).pipe(stream);	}
+					});
+				});
+			});
+		} catch(err) {
+			self.ssh.end();
+			cb(err);
+		}
+	},
+	
+	insecure: function(){ return this.url.substring(0, 6) != "https:" && this.url.substring(0,4) != "ssh:"; },
+
+	protocol: function(){ return this.url.substring(0, this.url.indexOf(":")); },
 
 	encryptIfNecessary: function(s) {
 		if (! this.insecure()) { return s; }
@@ -753,7 +858,7 @@ var Url = {
 				function getservermanifestwithdigests(cb) {
 					var data = {exclusions: self.encryptIfNecessary(folder.exclusionsJSON()), 
 								digest: true /* the key difference from deploy */};
-					$("#imp").remove();
+					self.helpers.progressupdate("#imp", function(j) { j.remove(); });
 					self.digestok = true;
 					self.helpers.progress("<p id='imp'><span id='impwaitforserver'>scanning files on server</span></p>");
 					self.post("manifest", "fetching manifest", data, function(err, content) {
@@ -761,7 +866,7 @@ var Url = {
 						content = self.decryptIfNecessary(content);
 						try { var jmanifest = JSON.parse(content); }
 						catch(err) { return cb(new Error("cannot parse manifest json")); }				
-						$("#impwaitforserver").remove();
+						self.helpers.progressupdate("#impwaitforserver", function(j){j.remove();});
 						self.localsync(Manifest.Factory(jmanifest), '', folder, cb);
 					});
 				}
@@ -770,6 +875,7 @@ var Url = {
 				/* Nasync.waterfall callback */
 				if (self.tunnel) { self.tunnel.disconnect(); }
 				self.helpers.progress("<p class='cinfocomplete'>completed</p>");
+				cb(errwaterfall);
 			});
 			
 		});
@@ -847,9 +953,9 @@ var Url = {
 						catch(err) { return cb(new Error("cannot parse manifest json")); }				
 						//.. cb(null, Manifest.Factory(jmanifest));
 						self.manifest = Manifest.Factory(jmanifest);
-						$("#impwaitforserver").remove();
+						self.helpers.progressupdate("#impwaitforserver", function(j){j.remove();});
 					});
-					$("#imp").remove();
+					self.helpers.progressupdate("#imp", function(j){j.remove();});
 					self.helpers.progress("<p id='imp'>looking for changes: scanned <span id='impfilecount'>0</span> files, <span id='impfoldercount'>0</span> folders<span id='impwaitforserver'>, waiting for server</span></p>");
 					cb(null); /* note: this means it isn't wating for the server to complete, 
 								 we'll prepare the local manifest in in parallel */
@@ -870,8 +976,9 @@ var Url = {
 				},
 
 				function compare(manifest, lmanifest, cb) {
-					self.comparemanifests(manifest, lmanifest, '', folder);
-					cb(null, manifest)
+					if (self.comparemanifests(manifest, lmanifest, '', folder, cb)) {
+						cb(null, manifest)
+					}
 				},
 
 				function upload(manifest, cb) {
@@ -885,27 +992,28 @@ var Url = {
 					/* from the (now slimmed down by processsubfolder) manifest, determine paths of all
 					   files to be uploade, noting which ones they are in the manifest so we can
 					   identify them on the server */
-					var paths = [];
+					var uploads = [];
 					var determinepaths = function(manifest, relpath) {
 						manifest.each(function(mitem) {
 							if (mitem.isdrop) { return; } // to be deleted on the server
 							if (mitem.isDirectory()) {
 								determinepaths(mitem.folder, relpath + mitem.name + "/");
 							} else if (mitem.isFile()) {
-								mitem.filenumber = paths.length;
-								paths.push(relpath+mitem.name);
+								mitem.filenumber = uploads.length;
+								uploads.push({relpath: relpath+mitem.name, size: mitem.size});
 							}
 						});
 					}
 					determinepaths(manifest, "/");
-					self.helpers.progress("<p id='iupprogress'>uploading "+paths.length+" files</p>");
+					self.helpers.progress("<p id='iupprogress'>uploading "+uploads.length+" files</p>");
 					var timer = setInterval(function(){
-						$("#iupprogress").text($("#iupprogress").text()+".");
+						self.helpers.progressupdate("#iupprogress", function(j){j.text(j.text()+"."); });
 					}, 1000);
 			
-					var sendfile = function(i, relpath, readstream, temppath, cb){
+					var sendfile = function(i, upload, readstream, temppath, cb){
 						var data = {filenumber: i /* not encrypted */, 
-									relpath: self.encryptIfNecessary(relpath),
+									relpath: self.encryptIfNecessary(upload.relpath),
+									size: upload.size,
 									formData: true, 0: readstream};
 						self.post("upload", "uploading", data, function(err) {
 							/* on completion, close readstream and remove temporary encrypted file */
@@ -920,9 +1028,9 @@ var Url = {
 					   aren't any files, in order to do any removals and add any new folders */
 					var tmpcount = 0;
 					Nasync.eachSeries(
-						paths,
-						function(relpath, cb){
-							var path = folder.root()+relpath;
+						uploads,
+						function(upload, cb){
+							var path = folder.root()+upload.relpath;
 							if (self.insecure()) {
 								Nfs.readFile(path, "binary", function(err, data) {
 									if (err) { return cb(err); }
@@ -932,19 +1040,19 @@ var Url = {
 										'utf8' /* it's hex data actually */, 
 										function(err){
 											if (err) { return cb(err); }
-											sendfile(tmpcount++, relpath, 
+											sendfile(tmpcount++, upload, 
 													 Nfs.createReadStream(pathencrypted), 
 													 pathencrypted, cb);
 										});
 								});
 							} else {
-								sendfile(tmpcount++, relpath, Nfs.createReadStream(path), null, cb);
+								sendfile(tmpcount++, upload, Nfs.createReadStream(path), null, cb);
 							}
 						},
 						function(err){ 
 							if (timer) { 
 								clearInterval(timer); 
-								$("#iupprogress").remove();
+								self.helpers.progressupdate("#iupprogress", function(j){j.remove();});
 							}
 							cb(err, manifest);
 						}
@@ -995,6 +1103,7 @@ var Url = {
 				self.post("maintenanceoff", "turning maintenance off", data, function(err, content) {
 					/* do it anyway irrespective of errors - we really want to close it down */
 					self.turnedmaintenanceon = false;
+					if (self.ssh) { self.ssh.end(); delete self.ssh; }
 					if (self.tunnel) { self.tunnel.disconnect(); }
 					self.helpers.progress("<p class='cinfocomplete'>completed</p>");
 					return cb(errwaterfall);

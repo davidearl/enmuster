@@ -17,6 +17,7 @@
       var Nrequest = require('request');
       var Nmd5 = require('MD5');
       var Ntemp = require('temp');
+      var Nbase64 = require('base64-stream');
 
       var win = Ngui.Window.get();
 
@@ -71,6 +72,8 @@
             </form>
 			<div class='cprojectshare cclick' enhint='export project to file'></div>
 			<div class='cprojecttest cclick' enhint='toggle test/live deployment'></div>
+			<div class='cprojectlive cprojectliveon cclick' enhint='turn on deployment of all live site urls'></div>
+			<div class='cprojectlive cprojectliveoff cclick' enhint='turn off deployment of all live site urls'></div>
 			<input type='file' id='iprojectshare' nwsaveas='' style='display: none;'>
 		  </div>
           <h3>folders on this computer to be deployed (<span id='ifoldercount'></span>): <span class='chelpme' enhash='folders'></span></h3>
@@ -84,15 +87,6 @@
 	
     <div id='ihelp' class='cclick' enhint='help'></div>
     <div id='isettings' class='cclick' enhint='settings'></div>
-	
-    <div id='iinfo'>
-      <div id='iinfobackground'></div>
-      <div id='iinfocontainer'>
-        <div id='iinfomessage' class='cmessage'></div>
-        <div id='iinfohtml' class='cmessage'></div>
-        <div id='iinfoclosebutton' class='cclick'>close</div>
-      </div>
-    </div>
 	
     <div id='ierror'>
       <div id='ierrorbackground'></div>
@@ -127,6 +121,13 @@
             <span class='cfolderdeletebutton cdeletebutton cclick' enhint='remove folder from project'></span>
           </div>
           <div class='cfoldercollapsed'><!-- an abbreviated version of what follows --></div>
+          <div class='curlshead csection'>
+			<div class='cprompt curlsprompt'>deploy this folder via these URLs:
+			  <span class='chelpme' enhash='urls'></span>
+			</div>
+			<ul class='curls'></ul>
+			<div class='curladd cclick' enhint='add new URL to this folder'></div>
+          </div>
           <div class='cexclusionshead csection'>
 			<div class='cprompt cexclusionsprompt'>except for specific files and subfolders (e.g. locations for user files, config files or log files): 
 			  <span class='chelpme' enhash='exclusions'></span>
@@ -143,13 +144,6 @@
               <input type='text' class='cinputexcludepatterns' value=''>
               <input type='image' class='csubmit cinputexcludepatternssubmit' src='ok.png'>
             </form>
-          </div>
-          <div class='curlshead csection'>
-			<div class='cprompt curlsprompt'>deploy this folder via these URLs:
-			  <span class='chelpme' enhash='urls'></span>
-			</div>
-			<ul class='curls'></ul>
-			<div class='curladd cclick' enhint='add new URL to this folder'></div>
           </div>
           <div class='crevisionhead csection'>
             <div class='cprompt crevisionprompt'>automatically update revision number in this file 
@@ -205,6 +199,7 @@
             </span>
             <span class='curlwarning'>URL not contactable</span>
 			<span class='cselfsignedbutton cclick' style='display: inline-block;' enhint='self-signed certificates permitted when yellow'></span>
+            <span class='curllivebutton cclick' enhint='set whether live site (live sites shown in orange)'></span>
             <span class='ctunneladdbutton cclick' style='display: inline-block;' enhint='connect via tunnel'></span>
             <span class='curlsyncbutton cclick' enhint='synchronise local file times from this url'></span>
             <span class='curlconfirmdeletebutton curlreallydeletebutton cconfirmdeletebutton cclick'>Remove</span>
@@ -219,8 +214,7 @@
               <span class='ctunnelnameplain'></span>
               <form class='cformtunnelcredentials' style='display: inline-block;'>
                 <input type='text' class='cinputtunnellogin' value='' placeholder='user'>
-                <!--<input type='password' class='cinputtunnelkey' placeholder='private key or p/w'>-->
-                <textarea class='cinputtunnelkey' placeholder='private key or p/w'></textarea>
+                <input type='password' class='cinputtunnelkey' placeholder='p/w (if no key)'>
                 <input type='text' class='cinputtunnelhost' placeholder='tunnel domain[:port]'>
                 <input type='image' class='csubmit cinputtunnelsubmit' src='ok.png'>
               </form>
@@ -246,7 +240,13 @@
 	  
     </div>
 
+	<div id='iinfo' style='display: none;'>
+	  <div id='iinfomessage'></div>
+	  <div id='iinfohtml'></div>
+	</div>
+	
 	<div id='ihint'></div>
+	<div id='ispinner'></div>
   </body>
   <script src='projects.js'></script>
   <script src='manifest.js'></script>
