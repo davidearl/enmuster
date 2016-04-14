@@ -17,7 +17,8 @@ h1 {
 	</style>
   </head>
   <body>
-    <h1><img src='enmuster48.png'> Enmuster settings <span id='iversion'></span></h1>
+    <h1><img src='enmuster48.png'> Enmuster settings
+	  <span id='iversion'>version <span id='iversionno'></span></span></h1>
     <div class='csettings'>
       <div class='csetting'>
 		<label for='isetclientname'>Client name</label><br>
@@ -40,7 +41,7 @@ h1 {
 	  <div class='csetting'>
 		<label for='isetauthenticationagent'>Authentication agent</label><br/>        
 		<input type='text' id='isetauthenticationagent' value=''><br>
-		<span class='csettinghint'>'pageant' on Windows, or path to ssh-agent's Unix socket on Unix
+		<span class='csettinghint'>'pageant' on Windows, or path to ssh-agent's<!--'--> Unix socket on Unix
 		  <span class='chelpme' enhash='ssh'></span></span>
 	  </div>
 	  <div class='csetting'>
@@ -114,9 +115,13 @@ h1 {
 			if ($(this)[0].files.length == 0) { return; }
 			var path = $(this)[0].files[0].path; /* not usually available, only in nw.js */
 			Nfs.readFile("enmusterserver_index.php", // what about the path when zipped?
+						 'utf8',
 						 function(err, data){
-							 if (err) { alert("can't find Enmuster Server file"); return; }
-							 Nfs.writeFile(path, data, function(err){ if (err) { alert("can't save file"); return; } });
+                             if (err) { alert("can't find Enmuster Server file"); return; }
+							 data = data.replace("ENMUSTER-VERSION-GOES-HERE", $("#iversionno").text());
+							 Nfs.writeFile(path, data, 'utf8', function(err){
+								 if (err) { alert("can't save file"); return; }
+							 });
 						 });
 			$(this).val("");
 		});
@@ -129,7 +134,7 @@ h1 {
     $(function(){
 	    var Ngui = require('nw.gui');
 		Ngui.Window.get().focus();
-		$("#iversion").text("version "+Ngui.App.manifest.version);
+		$("#iversionno").text(Ngui.App.manifest.version);
 	});
 </script>
 </html>

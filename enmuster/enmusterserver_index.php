@@ -2,6 +2,8 @@
 
 define("ENMUSTER_DATA_DIRECTORY", "CHANGE-ME");
 
+define("ENMUSTER_VERSION", "ENMUSTER-VERSION-GOES-HERE");
+
 /*
 
 This is the server side for Enmuster, a web site deployment tool -
@@ -169,14 +171,27 @@ class enmuster {
     if (empty($_POST['op'])) { self::oopsgoaway(); }
     $op = 'do_'.$_POST['op'];
     if (! method_exists('enmuster', $op))  { enmuster::oopsgoaway(); }
-    if ($op != 'do_init' && $op != 'do_check') { self::auth(); }
+    if ($op != 'do_init' && $op != 'do_check' && $op != 'do_version') { self::auth(); }
     call_user_func(array('enmuster', $op));
   }
 
   /* operation entry functions, in the order they are received */
 
-  static function do_check() { /* does nothing except check the server is reachable */ echo 'check'; }
+  static function do_check() {
+    /* does nothing except check the server is reachable (and provide version number) */
+    echo 'check';
+  }
     
+  static function do_version() {
+    /* return the version number (so we can see if it needs updating) */
+    echo ENMUSTER_VERSION;
+  }
+
+  static function do_updateserver() {
+    self::log("updateserver\n");
+    enmuster::updateserver();
+  }
+
   static function do_init() {
     if (! empty($_SERVER['REMOTE_USER'])) { enmuster::oops403($_SERVER['REMOTE_USER']); }
     if (empty($_POST['client'])) { enmuster::oops403('missing client'); }
@@ -667,6 +682,7 @@ EOD;
             $logthis = 'created';
             if (! @mkdir($path, 0755)) { self::oops("cannot make directory '{$path}'"); }
             if (! @touch($path, $el->mtime)) { self::oops("cannot set modified time for '{$path}'"); }
+            self::backupfileorfolder($path, $relpath, $el, TRUE /* new */);
           } else {
             $logthis = 'would have created';
           }
@@ -683,7 +699,7 @@ EOD;
           if (! is_file($path)) { 
             self::oops("when trying to replace file {$path}, it is currently a directory"); 
           }
-	  $perms = fileperms($path);
+          $perms = fileperms($path);
           if ($session->mode == 'live') {
             $logthis = 'replaced';
             self::backupfileorfolder($path, $relpath, $el);
@@ -692,14 +708,15 @@ EOD;
           }
         } else {
           $logthis = $session->mode == 'live' ? 'added' : 'would have added';
+          self::backupfileorfolder($path, $relpath, $el, TRUE /* new */);
         }
         if (! isset($el->filenumber)) { self::oops403("missing filenumber in manifest for '{$el->name}'"); }
         if (! is_numeric($el->filenumber)) { self::oops403("filenumber in manifest is not a number for '{$el->name}'"); }
         $tmppath = sprintf('%s/%d', self::uploadpath(), $el->filenumber);
         if ($session->mode == 'live') {
-	  if (! @rename($tmppath, $path)) { self::oops("cannot move '{$el->name}' to '{$path}' "); }
-	  if (! @touch($path, $el->mtime)) { self::oops("cannot set modified time for '{$path}'"); }
-	  if (! @chmod($path, $perms)) { self::oops("cannot set file permissions for '{$path}'"); }
+          if (! @rename($tmppath, $path)) { self::oops("cannot move '{$el->name}' to '{$path}' "); }
+          if (! @touch($path, $el->mtime)) { self::oops("cannot set modified time for '{$path}'"); }
+          if (! @chmod($path, $perms)) { self::oops("cannot set file permissions for '{$path}'"); }
         } else {
           if (! @unlink($tmppath)) { self::oops("cannot remove temporary uploaded file for '{$el->name}'"); }
         }
@@ -710,19 +727,46 @@ EOD;
     return $log;
   }
 
-  static function backupfileorfolder($path, $relpath, $el) {
+    static function backupfileorfolder($path, $relpath, $el, $newfile=FALSE) {
     /* we don't delete files, just move them to a dated directory in the Enmuster Data Directory */
     $session = self::getsession();
     static $backupdir = NULL;
+    static $backurestore = NULL;
+    static $restorepath = NULL;
     if (empty($backupdir)) {
       $backupdir = sprintf('%s/backup-%s%s-%s', ENMUSTER_DATA_DIRECTORY, $session->project, 
                            empty($session->target) ? '' : "-{$session->target}", date('Y-m-d-H-i-s'));
       if (! @mkdir($backupdir)) { 
         self::oops("cannot make directory for backing up removed files '{$backupdir}'");
       }
+      $restorepath = "{$backupdir}/||restore.sh";
+      $edel = escapeshellarg("{$backupdir}/deletedduringrestore");
+      $backurestore[] = <<<EOD
+#!/bin/sh
+# make a directory to put files removed as a result of restoring
+set -v
+mkdir {$edel}
+
+EOD;
     }
-    $tmppath = sprintf('%s/%s', $backupdir, str_replace('/', '|', substr($relpath,1).$el->name));
-    if (! @rename($path, $tmppath)) { self::oops("cannot backup '{$path}' to '{$tmppath}'"); }
+    if ($newfile) {
+      if (is_dir($path)) {
+        $backurestore[] = sprintf("rmdir %s\n", escapeshellarg($path));
+      } else {
+        $backurestore[] = sprintf("rm %s\n", escapeshellarg($path));
+      }
+    } else {
+      $tmppath = sprintf('%s/%s', $backupdir, str_replace('/', '|', substr($relpath,1).$el->name));
+      if (! @rename($path, $tmppath)) {
+        /* it may be on a different partition, which doesn't work with rename */
+        exec(sprintf('mv %s %s', escapeshellarg($path), escapeshellarg($tmppath)), $unused, $result);
+        if ($result != 0) {
+          self::oops("cannot backup '{$path}' to '{$tmppath}'");
+        }
+      }
+      $backurestore[] = sprintf("cp -a %s %s\n", escapeshellarg($tmppath), escapeshellarg($path));
+    }
+    file_put_contents($restorepath, implode("\n", $backurestore));
   }
 
   static function upgrade() {
@@ -766,6 +810,48 @@ EOD;
     return array('log'=>$log);
   }
 
+  static function updateserver() {
+    $session = self::getsession();
+
+    if (empty($_FILES[0])) { self::oops403("no file received"); }
+    if (count($_FILES) > 1) { self::oops403("multiple files received"); }
+    $file = $_FILES[0];
+    switch ($file['error']) {
+    case 0:
+    case UPLOAD_ERR_NO_FILE:
+      break;
+    case UPLOAD_ERR_INI_SIZE:
+    case UPLOAD_ERR_FORM_SIZE:
+      self::oops("File '{$file['name']}' was too big to transfer - you need to change both the POST upload limit and file upload size limit in the PHP settings on the server", 'size');
+    case UPLOAD_ERR_PARTIAL:
+      self::oops("file '{$file['name']}' was only partly transferred - something went wrong");
+    default:
+      self::oops('an unidentified error occurred while transferring your file');
+    }
+
+    $contents = file_get_contents($file['tmp_name']);
+     if ($contents === FALSE) { self::oops403("cannot read server file"); }
+    $contents = preg_replace(
+      '~define\\s*\\(\\s*[\'"]ENMUSTER_DATA_DIRECTORY[\'"]\\s*,\\s*[\'"][^\'"]+[\'"]\\s*\\)~',
+      sprintf('define("ENMUSTER_DATA_DIRECTORY", "%s")', ENMUSTER_DATA_DIRECTORY),
+      self::httpdecrypt($contents),
+      1 /* only the first occurence */
+    );
+    $path = __FILE__;
+    $perms = fileperms($path) & 0x1FF;
+    $chmoded = chmod ($path, 0666) /* so we can overwrite it */ !== FALSE;
+    if (file_put_contents($path, $contents) === FALSE) {
+      if ($chmoded) {
+        self::oops('cannot overwrite original server file');
+      } else {
+        self::oops('original server file is protected against overwriting, and the web server is not allowed to change its permission');
+      }
+    }
+    if ($chmoded) { chmod($path, $perms); }
+    echo 'updated';
+    exit;
+  }
+
   static function iscli() { return php_sapi_name() == 'cli'; }
 
   static function cli(){
@@ -777,7 +863,7 @@ EOD;
     if (!self::iscli()) { return; }
     parse_str(substr(fgets(STDIN), 0, -1), $_POST);
     if (empty($_POST['op'])) { return; }
-    if ($_POST['op'] == 'upload') {
+    if ($_POST['op'] == 'upload' || $_POST['op'] == 'updateserver') {
       $tmpdir = ENMUSTER_DATA_DIRECTORY.'/clupload';
       if (! is_dir($tmpdir)) { mkdir($tmpdir); }
       $temppath = tempnam($tmpdir, 'encil_');
@@ -795,7 +881,7 @@ EOD;
       self::log(sprintf("received %d byte file\n", filesize($temppath)));
       //if (! @copy('php://stdin', $temppath)) { $e = UPLOAD_ERR_CANT_WRITE; }
       //else
-      if (empty($_POST['relpath'])) { $e = UPLOAD_ERR_EXTENSION; }
+      if ($_POST['op'] == 'upload' && empty($_POST['relpath'])) { $e = UPLOAD_ERR_EXTENSION; }
       @chmod($temppath, 0644);
       $_FILES[0] = array(
         'error'=> $e,
@@ -809,5 +895,3 @@ EOD;
 enmuster::cli();
 enmuster::run();
 exit; // mostly the functions exit anyway so this is really redundant
-
-?>

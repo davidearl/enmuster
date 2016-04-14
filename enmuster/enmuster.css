@@ -160,6 +160,17 @@ form {
 	background-image: url(livesmallgreen.png);
 }
 
+.cprojectupdateserver {
+	position: relative;
+	top: -5px;
+	display: inline-block;
+	color: white;
+	background-color: orange;
+	border-radius: 5px;
+	padding: 5px;
+	margin-left: 10px;
+}
+
 .cdeletebutton, 
 .cprojectdeletebutton,
 .ctunneladdbutton,

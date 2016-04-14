@@ -51,7 +51,7 @@ var Util = {
 
 var enmuster = {
 
-    deploy: function() {
+	deploy: function() {
 		/* in response to the big orange button, run the current project (i.e. deploy its files) */
 		this.showinfo(""); // so we can append to it
 		enmuster.busy();
@@ -81,6 +81,28 @@ var enmuster = {
 						enmuster.drawproject(cp);		
 					}
 				});			
+		} catch(err) {
+			enmuster.showerror(err);
+		}
+    },
+	
+	serverUpdate: function() {
+		this.showinfo(""); // so we can append to it
+		enmuster.busy();
+		try {
+			var cp = projects.currentProject();
+			cp.serverUpdate(
+                {clientName: this.getClient(), 
+				 error: this.showerror,
+				 progress: this.appendinfo,
+				 progressupdate: this.updateinfo,
+				 encrypt: this.encrypt, decrypt: this.decrypt,
+				 privateKey: this.getprivatekey()}, 
+				function(err){
+					enmuster.idle();
+					if (err) { enmuster.showerror(err); return; }
+					$(".cprojectupdateserver").hide();
+				});
 		} catch(err) {
 			enmuster.showerror(err);
 		}
@@ -255,6 +277,10 @@ var enmuster = {
 
     selectproject: function(name){
 		projects.setCurrentProject(name);
+		
+		$(".cprojectupdateserver").hide();
+		enmuster.checkVersion();
+		
 		this.redraw();
     },
     deleteproject: function(jproject) {
@@ -490,7 +516,9 @@ var enmuster = {
 						 host: jn.find(".cinputtunnelhost").val()};
 		var url = projects.getUrlOfCurrent(jurl.closest(".cfolder").index(), jurl.index());
 		var tunnel = url.tunnel;
-		$(".cformtunnelcredentials, .ctunnelnameplain").toggle();
+		jn.toggle();
+		jn.closest(".ctunneldetails").find(".ctunnelnameplain").toggle();
+		
 		if (tunnel.login == newtunnel.login && 
 			tunnel.key == newtunnel.key &&
 			tunnel.host == newtunnel.host) 
@@ -908,6 +936,19 @@ var enmuster = {
 		}, 500);
 	},
 	
+	checkVersion: function() {
+		$(".cprojectupdateserver").hide();
+		try {
+			var cp = projects.currentProject();
+			cp.checkVersion(Util.getVersion(), function(err, minversion){
+				if (err) { return enmuster.showerror(err); }
+				$(".cprojectupdateserver").toggle(minversion != Util.getVersion());
+			});
+		} catch(err) {
+			enmuster.showerror(err);
+		}
+	},
+
 	checkforupdates: function() {
 		if (localStorage.nextversioncheck &&
 			Date.now() < parseInt(localStorage.nextversioncheck)) { return; }
@@ -997,6 +1038,9 @@ var enmuster = {
 			}).
 			on("click", ".cprojectlive", function(e){
 				enmuster.setprojectlive($(this).hasClass("cprojectliveon"));
+			}).
+			on("click", ".cprojectupdateserver", function(e){
+				enmuster.serverUpdate();
 			}).
 			on("click", ".cfolderstate", function(e){
 				enmuster.togglefolderstate($(this));
@@ -1215,6 +1259,7 @@ var enmuster = {
 		
 		$("#ierrorbackground").click(function(e){ e.stopPropagation(); });
 		
+		this.checkVersion();
 		this.redraw();
     }
 	

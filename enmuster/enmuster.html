@@ -46,6 +46,7 @@
 	  win.on("close", function(){
 	      if (enmuster.helpwindow) { enmuster.helpwindow.close(); }
 	      if (enmuster.settingswindow) { enmuster.settingswindow.close(); }
+	      if (enmuster.infowindow) { enmuster.infowindow.close(); }
 	      this.close(true);
 	  });
       })();
@@ -74,6 +75,7 @@
 			<div class='cprojecttest cclick' enhint='toggle test/live deployment'></div>
 			<div class='cprojectlive cprojectliveon cclick' enhint='turn on deployment of all live site urls'></div>
 			<div class='cprojectlive cprojectliveoff cclick' enhint='turn off deployment of all live site urls'></div>
+			<div class='cprojectupdateserver cclick' enhint='at least one server script is out of date for this Enmsuter, update them all'>update server scripts</div>
 			<input type='file' id='iprojectshare' nwsaveas='' style='display: none;'>
 		  </div>
           <h3>folders on this computer to be deployed (<span id='ifoldercount'></span>): <span class='chelpme' enhash='folders'></span></h3>

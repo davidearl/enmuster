@@ -117,6 +117,40 @@ var Project = {
 						  cb);
 	},
 
+	serverUpdate: function(helpers, cb){
+		var self = this;
+		self.helpers = helpers;
+		self.helpers.progress("<p class='cinfodeploying'>UPDATING SERVER SCRIPTS</p>");
+		Nasync.eachSeries(this.folders, 
+						  function(folder, cbf){ folder.serverUpdate(self, cbf) },
+						  cb);
+	},
+
+	checkVersion: function(versiontest, cb){
+		var self = this;
+		var minversion = versiontest;
+		var va = minversion.split(".");
+		var minversioni = ((parseInt(va[0])*10000)+parseInt(va[1]))*10000+parseInt(va[2]);
+		Nasync.eachSeries(
+			self.folders, 
+			function(folder, cbf){
+				folder.checkVersion(
+					self,
+					function(version){
+						var va = version.split(".");
+						var thisversion = ((parseInt(va[0])*10000)+parseInt(va[1]))*10000+parseInt(va[2]);
+						if (thisversion < minversioni) {
+							minversioni = thisversion;
+							minversion = version;
+						}
+					},
+					cbf) },
+			function(err) {
+				if (err) { return cb(err); }
+				cb(null, minversion);
+			});
+	},
+
 	getFolder: function(i) { return this.folders[i]; },
 	lengthFolders: function() { return	this.folders.length; },
 	eachFolder: function(fn) { this.folders.forEach(function(folder, i, a){ fn(folder); }); },
@@ -171,6 +205,13 @@ var Folder = {
 				collapsed: false};	 
 	},
 
+	checkVersion: function(project, vbf, cb){
+		var self = this;
+		Nasync.eachSeries(self.urls, 
+						  function(url, cbu){ url.checkVersion(project, self, vbf, cbu); },
+						  cb);
+	},
+
 	deployFolder: function(project, cb){
 		var self = this;
 		if (! self.deploy) { return cb(null); }
@@ -181,6 +222,13 @@ var Folder = {
 							  function(url, cbu){ url.deployToUrl(project, self, cbu); },
 							  cb);
 		});
+	},
+	
+	serverUpdate: function(project, cb){
+		var self = this;
+		Nasync.eachSeries(self.urls, 
+						  function(url, cbu){ url.serverUpdate(project, self, cbu); },
+						  cb);
 	},
 
 	updateRevision: function(project, cb) {
@@ -350,26 +398,42 @@ var Tunnel = {
 			self.client = new Client();
 			self.client.on('ready', function() {
 				//console.log('Client ready');
-				self.server = Nnet.createServer(function(sock){
-					// sock.pause();
-					//console.log("server active "+pt.hostname+":"+pt.port);
-					self.client.forwardOut(sock.remoteAddress, sock.remotePort, pt.hostname, pt.port, 
-						function(err, stream){
-							if (err) { cb(err); return; }
-							//console.log("piping");
-							sock.pipe(stream);
-							stream.pipe(sock);
-							// sock.resume();
-							//console.log("piped");
-						});
-				}).listen(Tunnel.GetLocalPort(), function(){ 
-					/* change URL to go via localhost through the tunnel instead of directly */
-					targeturl.updatePostUrl(
-						pt.protocol + "//localhost:" + Tunnel.GetLocalPort() + pt.pathname);
-					cb(null);
-				});
+				function listen() {
+					self.server.listen(Tunnel.GetLocalPort(), "localhost", function(){ 
+						/* change URL to go via localhost through the tunnel instead of directly */
+						targeturl.updatePostUrl(
+							pt.protocol + "//localhost:" + Tunnel.GetLocalPort() + pt.pathname);
+						cb(null);
+					});
+				}
+				try {
+					self.server = Nnet.createServer(function(sock){
+						//sock.pause();
+						//console.log("server active "+pt.hostname+":"+pt.port);
+						self.client.forwardOut(
+							sock.remoteAddress, sock.remotePort, pt.hostname, pt.port, 
+							function(err, stream){
+								if (err) { return cb(err); }
+								//console.log("piping");
+								sock.pipe(stream);
+								stream.pipe(sock);
+								// sock.resume();
+								//console.log("piped");
+							});
+					}).on("error", function(err){
+						console.log("error from tunnel server "+err);
+						cb(err);
+					});
+					listen();
+				} catch(err) {
+					console.log("catch in tunnel createserver/listen "+err);
+					cb(err);
+				}
 			});
-			self.client.connect(config);
+			try { self.client.connect(config); } catch(err) {
+				console.log("catch error in tunnel client connect "+err);
+				cb(err);
+			}
 		} catch(err) {
 			self.disconnect();
 			cb(err);
@@ -763,15 +827,22 @@ var Url = {
 			if (script.substr(-4) != ".php") {
 				script += script.substr(-1) == "/" ? "index.php" : "/index.php";
 			}
-			var cmd = "php5 '"+script+"'";
+			var cmd = "php '"+script+"'";
 
 			(function(execf){
 				if (self.ssh) { return execf(); }
 				self.ssh = new (Nssh2.Client)();		
 				self.ssh.on('keyboard-interactive', function(name, ins, insLang, prompts, finish){
 					finish([config.password]);
-				})
-				.on('ready', function() { execf(); });
+				}).
+				on('ready', function() { execf(); }).
+				on('error', function(err){
+					self.ssh.end();
+					self.ssh = null;
+					if (self.tunnel) { self.tunnel.disconnect(); }
+					console.log('error from sshpost client connect');
+					cb(err);
+				});
 				self.ssh.connect(config);
 			})(function(){	
 				//console.log('Client ready');
@@ -795,6 +866,9 @@ var Url = {
 			});
 		} catch(err) {
 			self.ssh.end();
+			self.ssh = null;
+			if (self.tunnel) { self.tunnel.disconnect(); }
+			console.log('error from ssh exec');
 			cb(err);
 		}
 	},
@@ -865,7 +939,7 @@ var Url = {
 						if (err) { return cb(err); }
 						content = self.decryptIfNecessary(content);
 						try { var jmanifest = JSON.parse(content); }
-						catch(err) { return cb(new Error("cannot parse manifest json")); }				
+						catch(err) { console.log(content); return cb(new Error("cannot parse manifest json")); }				
 						self.helpers.progressupdate("#impwaitforserver", function(j){j.remove();});
 						self.localsync(Manifest.Factory(jmanifest), '', folder, cb);
 					});
@@ -950,7 +1024,7 @@ var Url = {
 						if (err) { return cb(err); }
 						content = self.decryptIfNecessary(content);
 						try { var jmanifest = JSON.parse(content); }
-						catch(err) { return cb(new Error("cannot parse manifest json")); }				
+						catch(err) { console.log(content); return cb(new Error("cannot parse manifest json")); }				
 						//.. cb(null, Manifest.Factory(jmanifest));
 						self.manifest = Manifest.Factory(jmanifest);
 						self.helpers.progressupdate("#impwaitforserver", function(j){j.remove();});
@@ -1111,5 +1185,124 @@ var Url = {
 			});
 			
 		});
+	}, /* end of Url.deploy() */
+
+	serverUpdate: function(project, folder, cb) {
+		/* updates the server side script for this url */
+		var self = this;
+		self.helpers = project.helpers;
+		this.prepare();
+		
+		Nasync.times(self.tunnel ? 1 : 0, function(n, cbtunnel){
+			self.helpers.progress("<p>"+Util.h("opening tunnel to server")+"</p>");
+			self.tunnel.connect(self /* which gets modified */, cbtunnel);
+		},function(err, a){
+			if (err) { return cb(err); }
+
+			self.password = null;
+			self.auth = null;
+			self.postdateds = 0;
+			self.upgrades = [];
+			self.turnedmaintenanceon = false;
+			self.manifest = null;
+
+			self.helpers.progress("<p class='cinfofolder'>"+Util.h("folder "+folder.path+" to "+self.url)+"</p>");
+
+			Nasync.waterfall([
+				function init(cb) {
+					var data = {client: self.helpers.clientName, 
+								project: project.name};
+					if (self.target) { data.target = self.target; }
+					self.post("init", "initializing", data, function(err, encrypted) {
+						if (err) { return cb(err); }
+						// hex to binary...
+						var binary = '';
+						for(var i=0; i < encrypted.length-1; i+=2){
+							binary += String.fromCharCode(parseInt(encrypted.substr(i, 2), 16));
+						}
+						try {
+							session = JSON.parse(self.helpers.privateKey.decrypt(binary));
+						} catch (err) {
+							return cb("unable to get and decrypt a password from the server: you probably haven't installed your public key (see settings)");
+						}
+						self.password = session.password;
+						self.auth = {token: session.token, 
+									 auth: Util.encrypt(session.token, self.password)};
+						cb(null);
+					});
+				},
+
+				function getfile(cb) {
+					Nfs.readFile("enmusterserver_index.php",
+								 'utf8',
+								 function(err, content){
+									 if (err) { alert("can't find Enmuster Server file"); return; }
+									 content = content.replace("ENMUSTER-VERSION-GOES-HERE",
+														 Util.getVersion());
+									 cb(err, content);
+								 });
+				},
+				
+				function upload(content, cb) {
+					var Readable = require('stream').Readable;
+					var path = Ntemp.path();
+					Nfs.writeFile(
+						path,
+						self.insecure() ? Util.encrypt(content, self.password) : content,
+						'utf8',
+						function(err){
+							if (err) { return cb(err); }
+							var stream =  Nfs.createReadStream(path);
+							var data = {formData: true, 0: stream};
+							self.post("updateserver", "updating server", data,
+									  function(err, result) {
+										  stream.destroy();
+										  Nfs.unlink(path, function(){});
+										  if (err) { return cb(err); }
+										  if (result != 'updated') {
+											  return cb('updated did not complete, said: '+result);
+										  }
+										  cb(err);
+									  });
+						});
+				},
+			
+				function done(cb) {
+					self.helpers.progress("<p>done</p>");
+					cb(null);
+				}
+
+				/* end of Nasync.waterfall array */
+			], function(errwaterfall){			
+				if (self.tunnel) { self.tunnel.disconnect(); }
+				return cb(errwaterfall);
+			});
+			
+		});
+	}, /* end of Url.serverUpdate() */
+
+	checkVersion: function(project, folder, vbf, cb) {
+		var self = this;
+		self.helpers = project.helpers;
+		this.prepare();
+		
+		Nasync.times(self.tunnel ? 1 : 0, function(n, cbtunnel){
+			self.tunnel.connect(self /* which gets modified */, cbtunnel);
+		},function(err, a){
+			if (err) { return cb(err); }
+			self.post("version", "version", {}, function(err, response) {
+				if (! err) {
+					var old = '<!doctype';
+					if (response.substr(0, old.length) == old) {
+						return cb("The Enmuster server script is out of date, and requires a manual update; once done you can update automatically in the future. Some features such as deployment over ssh won't work until an update is done. Get an up-to-date copy of the server script from Settings. Don't forget to change ENMUSTER_DATA_DIRECTORY at the top of the file to what it was in your old version.");
+					}
+					vbf(response);
+				}
+				if (self.ssh) { self.ssh.end(); delete self.ssh; }
+				if (self.tunnel) { self.tunnel.disconnect(); }
+				cb(err);
+			});			
+		});
 	} /* end of Url.deploy() */
+
 }
