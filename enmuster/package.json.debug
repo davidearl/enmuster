@@ -1,8 +1,8 @@
 {
   "name": "enmuster",
   "decription": "a web site deployment tool",
-  "version": "2.0.0",
-  "user-agent": "enmuster/2.0.0",
+  "version": "2.0.7",
+  "user-agent": "enmuster/2.0.7",
   "main": "enmuster.html",
   "window": {
     "toolbar": false,

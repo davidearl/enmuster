@@ -385,7 +385,7 @@ EOD;
     if (! file_put_contents($authpath, hex2bin($_POST['auth']))) {
       self::oops403('cannot write temporary auth file');
     }
-    $token = shell_exec(sprintf("cat %s | openssl enc -des3 -d -pass 'pass:%s'",
+    $token = shell_exec(sprintf("cat %s | openssl enc -des3 -d -pass 'pass:%s' -md md5",
                                 escapeshellarg($authpath), $session->password));
     if (! @unlink($authpath)) { self::oops403('cannot remove auth file'); }
     if (empty($token)) { self::oops401('could not decrypt'); }
@@ -512,7 +512,7 @@ EOD;
     $session = self::getsession();
     $path = sprintf('%s/%s.plaintext', self::data(), $session->token);
     if (! @file_put_contents($path, $s)) { self::oops403("cannot write temporary file '{$path}'"); }
-    return bin2hex(shell_exec(sprintf("cat %s | openssl enc -des3 -e -pass 'pass:%s' ; rm %s",
+    return bin2hex(shell_exec(sprintf("cat %s | openssl enc -des3 -e -pass 'pass:%s' -md md5 ; rm %s",
                                       escapeshellarg($path), $session->password, escapeshellarg($path))));
   }
   static function httpdecrypt($s) {
@@ -520,7 +520,7 @@ EOD;
     $session = self::getsession();
     $path = sprintf('%s/%s.cipher', self::data(), $session->token);
     if (! @file_put_contents($path, hex2bin($s))) { self::oops403("cannot write temporary file '{$path}'"); }
-    return shell_exec(sprintf("cat %s | openssl enc -des3 -d -pass 'pass:%s' ; rm %s",
+    return shell_exec(sprintf("cat %s | openssl enc -des3 -d -pass 'pass:%s' -md md5 ; rm %s",
                               escapeshellarg($path), $session->password, escapeshellarg($path)));
   }
   static function httpdecryptfile($path) {
@@ -529,7 +529,7 @@ EOD;
     $escpath = escapeshellarg($path);
     $escpathnew = escapeshellarg("{$path}.new");
     return shell_exec(
-      sprintf("cat %s | xxd -r -p | openssl enc -des3 -d -pass 'pass:%s' > %s.new; mv %s.new %s",
+      sprintf("cat %s | xxd -r -p | openssl enc -des3 -d -pass 'pass:%s' -md md5 > %s.new; mv %s.new %s",
               $escpath, $session->password, $escpathnew, $escpathnew, $escpath));
   }
 
