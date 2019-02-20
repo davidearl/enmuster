@@ -599,7 +599,7 @@ var enmuster = {
 		}
 		return localStorage.authenticationagent;
     },
-    saveAuthenticationAgent: function(clientname) {
+    saveAuthenticationAgent: function(authenticationagent) {
 		localStorage.authenticationagent = authenticationagent;
 	},
 	

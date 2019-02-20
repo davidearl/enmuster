@@ -84,7 +84,7 @@ h1 {
             Tunnel.SaveLocalPort($(this).val());
 	    });
 	    $("#isetauthenticationagent").val(enmuster.getAuthenticationAgent()).on("change", function(){
-            enmuster.setAuthenticationAgent($(this).val());
+            enmuster.saveAuthenticationAgent($(this).val());
 	    });
         $("#isetsavekeybutton").click(function(){
 	        // see https://github.com/nwjs/nw.js/wiki/File-dialogs
