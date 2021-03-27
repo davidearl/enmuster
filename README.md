@@ -5,7 +5,7 @@ It's a bit like servicing a code repository :-). But intended for
 (multiple copies of) live web sites.
 
 Website for end-user packages including Windows Installer and the help
-file also included in the app, at [enmuster.net](http://enmuster.net).
+file also included in the app, at [enmuster.savesnine.info](http://enmuster.savesnine.info).
 
 This project is built using [nw.js](http://nwjs.io/), which provides a
 desktop environment for node.js combined with the Chromium
